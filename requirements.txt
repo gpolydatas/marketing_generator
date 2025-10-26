@@ -1,0 +1,32 @@
+# Marketing Content Generator - Python Dependencies
+# Install with: uv pip install -r requirements.txt
+
+# Core Agent Framework
+fast-agent-mcp
+
+# AI APIs
+openai
+
+# Environment & Configuration
+python-dotenv
+
+# HTTP & Networking
+requests
+httpx
+
+# Web Framework (for MCP servers)
+fastapi
+uvicorn[standard]
+
+# Data Validation
+pydantic
+
+# Testing
+pytest
+pytest-asyncio
+
+# Additional Required Dependencies
+anthropic
+streamlit
+pyyaml
+Pillow
