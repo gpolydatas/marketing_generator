@@ -59,6 +59,11 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Optional additional instructions for regeneration",
                         "default": ""
+                    },
+                    "reference_image_path": {
+                        "type": "string",
+                        "description": "Optional: Full path to reference image for image-to-image generation (style transfer, inspiration)",
+                        "default": ""
                     }
                 },
                 "required": ["campaign_name", "brand_name", "banner_type", "message", "cta"]
@@ -119,9 +124,10 @@ async def generate_banner(
     banner_type: str,
     message: str,
     cta: str,
-    additional_instructions: str = ""
+    additional_instructions: str = "",
+    reference_image_path: str = ""
 ) -> str:
-    """Generate banner image using DALL-E 3"""
+    """Generate banner image using DALL-E 3 with optional reference image"""
     
     # Validate banner type
     if banner_type not in BANNER_SPECS:
@@ -175,6 +181,12 @@ Make the text perfect - that's the priority."""
     if additional_instructions:
         prompt += f"\n\nIMPROVEMENTS FOR THIS ATTEMPT:\n{additional_instructions}"
         prompt += f"\n\nREMINDER: Brand='{brand_name}', Message='{message}', CTA='{cta}' - spell exactly!"
+    
+    # Add reference image guidance if provided
+    reference_image_context = ""
+    if reference_image_path and os.path.exists(reference_image_path):
+        prompt += f"\n\nSTYLE REFERENCE: Use the uploaded reference image as inspiration for style, composition, color scheme, and mood. Maintain the creative direction shown in the reference while incorporating the required text elements perfectly."
+        reference_image_context = f" (with style reference from {os.path.basename(reference_image_path)})"
     
     prompt = prompt[:4000]  # DALL-E limit
     
@@ -234,6 +246,7 @@ Make the text perfect - that's the priority."""
                 "message": message,
                 "cta": cta,
                 "additional_instructions": additional_instructions,
+                "reference_image_path": reference_image_path if reference_image_path else None,
                 "filename": filename,
                 "filepath": filepath,
                 "url": image_url,

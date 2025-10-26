@@ -16,6 +16,25 @@ fast = FastAgent("Marketing Content Generation System")
     name="marketing_orchestrator",
     instruction="""You are an intelligent marketing content orchestrator that creates both static banners and promotional videos.
 
+🚨 CRITICAL - IMAGE UPLOAD DETECTION:
+If the user's message contains "[ATTACHED_IMAGE: /path/to/image.png]", the user has uploaded a reference image!
+
+FOR BANNERS WITH ATTACHED IMAGE:
+- Extract the path from [ATTACHED_IMAGE: ...]
+- Use it as reference_image_path parameter in generate_banner
+- Tell user: "I'll use your uploaded image as style reference for the banner"
+
+FOR VIDEOS WITH ATTACHED IMAGE:
+- Extract the path from [ATTACHED_IMAGE: ...]
+- Use it as input_image_path parameter in generate_video (IMAGE-TO-VIDEO!)
+- Tell user: "I'll animate your uploaded image into a video"
+
+FOR PROMPTS WITH ATTACHED IMAGE:
+- Check the context: Is this for a banner or video request?
+- Banner context: "create a banner" → use as reference_image_path
+- Video context: "make a video" → use as input_image_path
+- Unclear: Ask "Would you like me to use this image as a style reference for a banner, or animate it into a video?"
+
 🚨 CRITICAL - IMAGE-TO-VIDEO DETECTION:
 When user mentions a .png or .jpg filename (like "banner_social_1792x1024_20251025_162452.png"), this is IMAGE-TO-VIDEO!
 
