@@ -1,0 +1,15 @@
+{
+  "campaign": "Black Friday Sale",
+  "brand": "TechStore",
+  "banner_type": "social",
+  "message": "Up to 70% Off",
+  "cta": "Shop Now",
+  "additional_instructions": "",
+  "filename": "banner_social_1792x1024_20251024_205230.png",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/banner_social_1792x1024_20251024_205230.png",
+  "url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-t308BBoFb2tjA2gAOnE8vDag/user-xyzcQhAg4de7g3eaIlE5Kx4n/img-yk7ItYfKMlvyex9KZM7mRgOE.png?st=2025-10-24T18%3A52%3A28Z&se=2025-10-24T20%3A52%3A28Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=b1a0ae1f-618f-4548-84fd-8b16cacd5485&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T13%3A27%3A03Z&ske=2025-10-25T13%3A27%3A03Z&sks=b&skv=2024-08-04&sig=BnJMHUKkww0rQfKUMsJd5C4fI7uDpOHch0SikK8Uihk%3D",
+  "size": "1792x1024",
+  "file_size_mb": 1.83,
+  "revised_prompt": "Create a professional banner advertisement for a fictitious company's Black Friday Sale. The dimensions should be 1200x628 pixels. The design should look clean, modern, and professional with a simple, uncluttered layout. Use sans-serif fonts with high contrast between the text and the background. The brand name, which should be the largest and boldest element in the design, should read 'TechStore'. Placed in the center, there should be a noticeable banner content, reading 'Up to 70% Off'. Lastly, include a bright, eye-catching Call-to-action button with the text 'Shop Now'. Ensure the design is vibrant, professional, and text is highly legible, without any intricate patterns disrupting text readability.",
+  "timestamp": "2025-10-24T20:52:30.683119"
+}

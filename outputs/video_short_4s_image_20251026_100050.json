@@ -1,0 +1,17 @@
+{
+  "campaign": "png\n to create a short",
+  "brand": "Brand",
+  "video_type": "short",
+  "duration": 4,
+  "description": "a short video",
+  "resolution": "720p",
+  "aspect_ratio": "16:9",
+  "source_type": "image",
+  "input_image": "outputs/banner_social_1792x1024_20251026_094107.png",
+  "additional_instructions": "",
+  "filename": "video_short_4s_image_20251026_100050.mp4",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/video_short_4s_image_20251026_100050.mp4",
+  "file_size_mb": 2.02,
+  "model": "veo-3.1-generate-preview",
+  "timestamp": "2025-10-26T10:00:51.046302"
+}

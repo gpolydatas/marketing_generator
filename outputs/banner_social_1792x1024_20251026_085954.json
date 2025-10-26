@@ -1,0 +1,15 @@
+{
+  "campaign": "create a black friday",
+  "brand": "Brand",
+  "banner_type": "social",
+  "message": "Special Offer",
+  "cta": "Learn More",
+  "additional_instructions": "",
+  "filename": "banner_social_1792x1024_20251026_085954.png",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/banner_social_1792x1024_20251026_085954.png",
+  "url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-t308BBoFb2tjA2gAOnE8vDag/user-xyzcQhAg4de7g3eaIlE5Kx4n/img-YFIEjaptg1oggWtCif0GLmT4.png?st=2025-10-26T07%3A59%3A51Z&se=2025-10-26T09%3A59%3A51Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=cc612491-d948-4d2e-9821-2683df3719f5&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-25T14%3A01%3A31Z&ske=2025-10-26T14%3A01%3A31Z&sks=b&skv=2024-08-04&sig=6%2BQmWDSQftpXEQxbu2jEwXcTXFowODXIPu7rCbu4ho0%3D",
+  "size": "1792x1024",
+  "file_size_mb": 2.08,
+  "revised_prompt": "Create a professional banner advertisement. The design must be clean, modern and have a professional advertising look. The banner dimensions should be 1200x628 pixels. Ensure a simple and uncluttered layout is used, where the text is the main focus. Use a sans-serif font to ensure high contrast and legibility. The brand name 'Brand' should be the largest element on the banner, written in bold at the top or center. The main message 'Special Offer' should be visibly readable and placed at the center. Include a call-to-action button highlighted with a bright color, and displaying the text 'Learn More' at bottom or a prominent position. The color scheme of the banner should be professional, vibrant, and eye-catching. For the background, adopt a minimalist or subtle design that doesn't interfere with text readability. Follow a text hierarchy with the 'Brand' name as the biggest and boldest, 'Special Offer' as medium and in the center, and 'Learn More' on the button in a prominent position. Remember to keep the text crystal clear and easy to read, avoid decorative text or extra words, steer clear of complex patterns behind text, and maintain a high contrast between text and background for a professional advertising quality.",
+  "timestamp": "2025-10-26T08:59:54.329508"
+}

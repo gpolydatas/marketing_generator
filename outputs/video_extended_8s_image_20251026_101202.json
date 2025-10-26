@@ -1,0 +1,17 @@
+{
+  "campaign": "Banner Animation",
+  "brand": "Brand",
+  "video_type": "extended",
+  "duration": 8,
+  "description": "Dramatic lighting effects sweep dynamically across the banner for a full 8 seconds, creating bold highlights and shifting shadows with smooth transitions. Camera remains steady to emphasize the evolving lighting.",
+  "resolution": "720p",
+  "aspect_ratio": "16:9",
+  "source_type": "image",
+  "input_image": "outputs/banner_social_1792x1024_20251026_091250.png",
+  "additional_instructions": "",
+  "filename": "video_extended_8s_image_20251026_101202.mp4",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/video_extended_8s_image_20251026_101202.mp4",
+  "file_size_mb": 3.58,
+  "model": "veo-3.1-generate-preview",
+  "timestamp": "2025-10-26T10:12:03.229728"
+}

@@ -1,0 +1,17 @@
+{
+  "campaign": "Banner Animation",
+  "brand": "Brand",
+  "video_type": "short",
+  "duration": 4,
+  "description": "Cinematic lighting effects sweep dynamically across the banner, creating bold highlights and shifting shadows. The camera remains steady to emphasize the dramatic transition of lights.",
+  "resolution": "720p",
+  "aspect_ratio": "16:9",
+  "source_type": "image",
+  "input_image": "outputs/banner_social_1792x1024_20251026_091250.png",
+  "additional_instructions": "",
+  "filename": "video_short_4s_image_20251026_100954.mp4",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/video_short_4s_image_20251026_100954.mp4",
+  "file_size_mb": 1.69,
+  "model": "veo-3.1-generate-preview",
+  "timestamp": "2025-10-26T10:09:54.905545"
+}

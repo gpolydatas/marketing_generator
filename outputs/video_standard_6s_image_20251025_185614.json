@@ -1,0 +1,17 @@
+{
+  "campaign": "Banner Animation",
+  "brand": "TechStore",
+  "video_type": "standard",
+  "duration": 6,
+  "description": "Slow zoom into the center with subtle rotation and dramatic lighting sweep",
+  "resolution": "720p",
+  "aspect_ratio": "16:9",
+  "source_type": "image",
+  "input_image": "outputs/banner_social_1792x1024_20251025_162452.png",
+  "additional_instructions": "",
+  "filename": "video_standard_6s_image_20251025_185614.mp4",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/video_standard_6s_image_20251025_185614.mp4",
+  "file_size_mb": 2.24,
+  "model": "veo-3.1-generate-preview",
+  "timestamp": "2025-10-25T18:56:14.988947"
+}

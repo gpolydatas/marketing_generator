@@ -1,0 +1,15 @@
+{
+  "campaign": "Black Friday Sale",
+  "brand": "TechStore",
+  "banner_type": "social",
+  "message": "Up to 70% Off",
+  "cta": "Shop Now",
+  "additional_instructions": "",
+  "filename": "banner_social_1792x1024_20251025_135717.png",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/banner_social_1792x1024_20251025_135717.png",
+  "url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-t308BBoFb2tjA2gAOnE8vDag/user-xyzcQhAg4de7g3eaIlE5Kx4n/img-QSHWhLpIny4EQZqxf3HNwOqF.png?st=2025-10-25T11%3A57%3A14Z&se=2025-10-25T13%3A57%3A14Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=77e5a8ec-6bd1-4477-8afc-16703a64f029&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-25T12%3A55%3A18Z&ske=2025-10-26T12%3A55%3A18Z&sks=b&skv=2024-08-04&sig=ZP9Hwn0a9AbQ%2BWjv6hFdXZpYBxIM43o7WK8c5fHypnw%3D",
+  "size": "1792x1024",
+  "file_size_mb": 2.06,
+  "revised_prompt": "Produce a professional banner advertisement for a technological devices store entitled 'TechStore', having their Black Friday Sale. The banner should be designed in a clean, modern, and professional advertising style. The layout should be uncluttered, featuring a size of 1200x628 pixels with predominantly sans-serif typography for high legibility. The brand name, 'TechStore', should be the largest and boldest element, perhaps situated at the top or center. The main message, 'Up to 70% Off', should be clear and readable, residing in the central area but not as prominently as the brand name. Including a bright, prominently positioned call-to-action button labelled 'Shop Now', preferably at the bottom. The color scheme should be professional, vibrant and eye-catching, with a clean or subtly decorated background that doesn't interfere with text readability. Maintaining high contrast between the text and background is essential for an enticing visual impact and clear messaging. The quality of the advertisement should be professional with a strong focus on making the text content absolutely perfect for potential customers.",
+  "timestamp": "2025-10-25T13:57:17.260315"
+}

@@ -1,0 +1,15 @@
+{
+  "campaign": "Create a black Friday",
+  "brand": "Brand",
+  "banner_type": "social",
+  "message": "70% Off",
+  "cta": "Learn More",
+  "additional_instructions": "",
+  "filename": "banner_social_1792x1024_20251026_094107.png",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/banner_social_1792x1024_20251026_094107.png",
+  "url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-t308BBoFb2tjA2gAOnE8vDag/user-xyzcQhAg4de7g3eaIlE5Kx4n/img-Hf4eMDD54IMKHbFoZt2GIgsJ.png?st=2025-10-26T08%3A41%3A04Z&se=2025-10-26T10%3A41%3A04Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=8b33a531-2df9-46a3-bc02-d4b1430a422c&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-26T00%3A53%3A02Z&ske=2025-10-27T00%3A53%3A02Z&sks=b&skv=2024-08-04&sig=0ZP3hBa9arZnWDxP61eh/2tW2USC6ZN40IDMcKE1ruQ%3D",
+  "size": "1792x1024",
+  "file_size_mb": 1.6,
+  "revised_prompt": "Design a professional banner advert which features the text in this hierarchy: 'Brand' as the largest, boldest element at the top or center, '70% Off' in a medium size at the center, and 'Learn More' prominently positioned on a vibrant button at the bottom or in another noticeable position. The layout should be simple, uncluttered, and text-centric, with high contrast between the text and the clean or subtly patterned background. The overall design must entail a clean, modern, and professional advertising feel, with eye-catching, vibrant colors, all encased in the dimensions of 1200x628 pixels. The typography should be in sans-serif fonts for high legibility.",
+  "timestamp": "2025-10-26T09:41:07.500678"
+}

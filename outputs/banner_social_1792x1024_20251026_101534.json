@@ -1,0 +1,15 @@
+{
+  "campaign": "Black Friday Sale",
+  "brand": "TechStore",
+  "banner_type": "social",
+  "message": "Up to 70% Off",
+  "cta": "Shop Now",
+  "additional_instructions": "",
+  "filename": "banner_social_1792x1024_20251026_101534.png",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/banner_social_1792x1024_20251026_101534.png",
+  "url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-t308BBoFb2tjA2gAOnE8vDag/user-xyzcQhAg4de7g3eaIlE5Kx4n/img-FyUGRikIfWOvU7D3A1oF7rqS.png?st=2025-10-26T09%3A15%3A31Z&se=2025-10-26T11%3A15%3A31Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=77e5a8ec-6bd1-4477-8afc-16703a64f029&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-25T19%3A49%3A35Z&ske=2025-10-26T19%3A49%3A35Z&sks=b&skv=2024-08-04&sig=XOuhDn1sRUrWHNmK5B8fsUmgrVyaxL6GXyfffgXoZX8%3D",
+  "size": "1792x1024",
+  "file_size_mb": 2.44,
+  "revised_prompt": "Compose a rectangular banner advertisement measuring precisely 1200x628 pixels for a technology-themed retail establishment named 'TechStore'. In this clean, contemporary, and professional design, the brand name 'TechStore' should be the most prominent element in the layout, displaying in prominent and bold sans-serif typography at the top or center of the image. The main message 'Up to 70% Off' written exactly as such should be aptly positioned in the center of the image with a medium size font, while preserving the high-contrast and extreme legibility of the text. At the bottom or another prominent position, there should be a call-to-action button with the phrase 'Shop Now' in stunning contrast to the button's bright color. The color scheme of the banner should be aesthetically pleasing, vibrant, and catchy. A clean or subtle background should be used to ensure an uncomplicated appearance and critical readability of the text. The entire design should be void of complex patterns or any elements that might subvert the clarity of the text.",
+  "timestamp": "2025-10-26T10:15:34.866704"
+}

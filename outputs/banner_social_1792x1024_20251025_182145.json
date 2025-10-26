@@ -1,0 +1,15 @@
+{
+  "campaign": "Black Friday Sale",
+  "brand": "TechStore",
+  "banner_type": "social",
+  "message": "Up to 70% Off",
+  "cta": "Shop Now",
+  "additional_instructions": "",
+  "filename": "banner_social_1792x1024_20251025_182145.png",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/banner_social_1792x1024_20251025_182145.png",
+  "url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-t308BBoFb2tjA2gAOnE8vDag/user-xyzcQhAg4de7g3eaIlE5Kx4n/img-7PNgv3kNbutosO4Hq2pJ54Nz.png?st=2025-10-25T16%3A21%3A43Z&se=2025-10-25T18%3A21%3A43Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=cc612491-d948-4d2e-9821-2683df3719f5&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-25T16%3A33%3A50Z&ske=2025-10-26T16%3A33%3A50Z&sks=b&skv=2024-08-04&sig=yaUpgEpjCUmXRa9LnW5ulUYYvjV2c5gbQYcGN8866D8%3D",
+  "size": "1792x1024",
+  "file_size_mb": 1.66,
+  "revised_prompt": "Generate a clean, modern, professional banner advertisement for a store named TechStore. The advertisement should have dimensions of 1200x628 pixels, and a simple, uncluttered layout. The design must prominently feature sans-serif fonts with high contrast for optimum legibility. The banner should highlight three key text elements in the following order of size and prominence: 1) the brand name 'TechStore', positioned at the top or center and designed to be the largest and boldest element; 2) The main sale message 'Up to 70% Off', which should be of medium size and located in the central area of the banner; and 3) The call-to-action 'Shop Now', written on a prominent bright-colored button, placed at the bottom or in another eye-catching position. The color scheme should be vibrant and eye-catching yet professional. The background should be clean or subtly patterned to ensure it does not interfere with text readability. Overall, the design should reflect professional advertising quality, with high contrast between the text and background, and no decorative text or extra words.",
+  "timestamp": "2025-10-25T18:21:45.325146"
+}

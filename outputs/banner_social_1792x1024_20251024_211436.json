@@ -1,0 +1,15 @@
+{
+  "campaign": "Black Friday Sale",
+  "brand": "TechStore",
+  "banner_type": "social",
+  "message": "Up to 70% Off",
+  "cta": "Shop Now",
+  "additional_instructions": "",
+  "filename": "banner_social_1792x1024_20251024_211436.png",
+  "filepath": "/home/gpoly/Downloads/poc_eng/outputs/banner_social_1792x1024_20251024_211436.png",
+  "url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-t308BBoFb2tjA2gAOnE8vDag/user-xyzcQhAg4de7g3eaIlE5Kx4n/img-Pe2Dt9C7OBJett7MHDaKD7FE.png?st=2025-10-24T19%3A14%3A34Z&se=2025-10-24T21%3A14%3A34Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=77e5a8ec-6bd1-4477-8afc-16703a64f029&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-24T18%3A16%3A09Z&ske=2025-10-25T18%3A16%3A09Z&sks=b&skv=2024-08-04&sig=rZo0jVzxYPylZHauQ%2BKc4S6f/qNDpf5fFVJGCCwRXQc%3D",
+  "size": "1792x1024",
+  "file_size_mb": 1.8,
+  "revised_prompt": "Generate a professional banner advertisement for a technology retail store's Black Friday Sale. Respect the suggested dimensions of 1200x628 pixels, and apply clean, modern, and professional advertising style. Layout to be simple and uncluttered, with the primary focus on legible text, using sans-serif fonts presented with high contrast. The brand name 'TechStore' must be the most prominent element, displayed in a large, bold fashion either at the top or center of the banner. The main message announcing 'Up to 70% Off' should be evident, positioned in the center area. The call-to-action, 'Shop Now', must be designed on a vibrant and attention-grabbing button, placed either at the bottom or some other noticeable position. The color scheme should be professional, vibrant, and eye-catching, while the background should be clean or subtly designed so as not to interfere with text readability. Maintain a high contrast between the text and the background and ensure advertising quality. In terms of text size hierarchy:  1. 'TechStore' - Largest and boldest. 2. 'Up to 70% Off' - Medium size. 3. 'Shop Now' - Displayed on CTA button. Follow these critical rules:  The text must be crystal clear; there should be no decorative text or additional wording; refrain from using complex patterns behind the text.",
+  "timestamp": "2025-10-24T21:14:36.278529"
+}
