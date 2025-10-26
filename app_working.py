@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-STREAMLIT WEB INTERFACE - FULLY FUNCTIONAL
+STREAMLIT WEB INTERFACE - WITH MODEL SELECTION
 Direct MCP tool calls without agent
 """
 
@@ -75,6 +75,8 @@ st.markdown("""
 # Initialize session state
 if 'generation_log' not in st.session_state:
     st.session_state.generation_log = []
+if 'selected_video_model' not in st.session_state:
+    st.session_state.selected_video_model = 'veo'  # Default to Veo 3.1
 
 # Helper functions
 def load_metadata(filepath):
@@ -135,6 +137,7 @@ def display_video(filepath, metadata=None, key_suffix=""):
             st.write(f"**Brand:** {metadata.get('brand', 'N/A')}")
             st.write(f"**Duration:** {metadata.get('duration', 'N/A')}s")
             st.write(f"**Resolution:** {metadata.get('resolution', 'N/A')}")
+            st.write(f"**Model:** {metadata.get('model', 'N/A')}")
             st.write(f"**Size:** {metadata.get('file_size_mb', 0):.2f} MB")
         
         with open(filepath, 'rb') as f:
@@ -146,126 +149,6 @@ def display_video(filepath, metadata=None, key_suffix=""):
                 use_container_width=True,
                 key=f"download_video_{os.path.basename(filepath)}_{key_suffix}"
             )
-
-def parse_prompt(prompt):
-    """Parse prompt to extract parameters for banner or video generation"""
-    prompt_lower = prompt.lower()
-    
-    # Determine type
-    is_video = any(word in prompt_lower for word in ['video', 'clip', 'motion', 'animate'])
-    is_banner = any(word in prompt_lower for word in ['banner', 'image', 'poster', 'ad'])
-    
-    result = {'type': None}
-    
-    if is_video:
-        result['type'] = 'video'
-        
-        # CHECK FOR FILENAME - this means image-to-video!
-        import re
-        filename_match = re.search(r'(banner_[\w\-]+\.(?:png|jpg|jpeg))', prompt, re.IGNORECASE)
-        if filename_match:
-            result['input_image_path'] = f"outputs/{filename_match.group(1)}"
-            result['source_filename'] = filename_match.group(1)
-            result['is_image_to_video'] = True
-            # Remove filename from description for motion-only description
-            result['description'] = re.sub(r'banner_[\w\-]+\.(?:png|jpg|jpeg)', '', prompt, flags=re.IGNORECASE).strip()
-            # Clean up description - remove "use banner", "to create", etc.
-            result['description'] = re.sub(r'use\s+banner\s+|to\s+create\s+|from\s+', '', result['description'], flags=re.IGNORECASE).strip()
-            if not result['description'] or len(result['description']) < 10:
-                result['description'] = "Cinematic slow zoom into center with dynamic lighting effects"
-        else:
-            result['input_image_path'] = None
-            result['source_filename'] = None
-            result['is_image_to_video'] = False
-            result['description'] = prompt
-        
-        # Extract video duration
-        if 'short' in prompt_lower or '4 second' in prompt_lower or '4s' in prompt_lower:
-            result['video_type'] = 'short'
-        elif 'extended' in prompt_lower or 'long' in prompt_lower or '8 second' in prompt_lower or '8s' in prompt_lower:
-            result['video_type'] = 'extended'
-        else:
-            result['video_type'] = 'standard'  # default 6s
-        
-        # Extract resolution
-        if '1080p' in prompt_lower or '1080' in prompt_lower or 'high res' in prompt_lower or 'hd' in prompt_lower:
-            result['resolution'] = '1080p'
-        else:
-            result['resolution'] = '720p'
-        
-        # Extract aspect ratio
-        if '9:16' in prompt or '9x16' in prompt_lower or 'vertical' in prompt_lower or 'portrait' in prompt_lower or 'story' in prompt_lower or 'reel' in prompt_lower:
-            result['aspect_ratio'] = '9:16'
-        else:
-            result['aspect_ratio'] = '16:9'  # default landscape
-        
-        # Description already set above (either cleaned or full prompt)
-        
-        # Try to extract brand/campaign from common patterns
-        import re
-        
-        # Look for "for [brand]" or "[brand] video"
-        brand_match = re.search(r'for\s+([A-Z][a-zA-Z0-9\s]+?)(?:\s+video|\s+with|\s*$)', prompt)
-        if brand_match:
-            result['brand'] = brand_match.group(1).strip()
-        else:
-            result['brand'] = 'Brand'
-        
-        # Look for campaign name
-        campaign_match = re.search(r'([\w\s]+?)\s+(?:video|campaign)', prompt)
-        if campaign_match:
-            result['campaign'] = campaign_match.group(1).strip()
-        else:
-            result['campaign'] = 'Video Campaign'
-    
-    elif is_banner:
-        result['type'] = 'banner'
-        
-        # Extract banner type
-        if 'leaderboard' in prompt_lower:
-            result['banner_type'] = 'leaderboard'
-        elif 'square' in prompt_lower:
-            result['banner_type'] = 'square'
-        else:
-            result['banner_type'] = 'social'  # default
-        
-        # Try to extract components using patterns
-        import re
-        
-        # Look for brand name
-        brand_match = re.search(r'for\s+([A-Z][a-zA-Z0-9]+)', prompt)
-        if brand_match:
-            result['brand'] = brand_match.group(1)
-        else:
-            result['brand'] = 'Brand'
-        
-        # Look for percentage/discount
-        discount_match = re.search(r'(\d+%?\s*(?:off|discount|sale))', prompt, re.IGNORECASE)
-        if discount_match:
-            result['message'] = discount_match.group(1)
-        else:
-            result['message'] = 'Special Offer'
-        
-        # Look for CTA keywords
-        if 'shop now' in prompt_lower:
-            result['cta'] = 'Shop Now'
-        elif 'buy now' in prompt_lower:
-            result['cta'] = 'Buy Now'
-        elif 'learn more' in prompt_lower:
-            result['cta'] = 'Learn More'
-        elif 'sign up' in prompt_lower:
-            result['cta'] = 'Sign Up'
-        else:
-            result['cta'] = 'Learn More'
-        
-        # Campaign name
-        campaign_match = re.search(r'([\w\s]+?)\s+(?:banner|sale|campaign)', prompt)
-        if campaign_match:
-            result['campaign'] = campaign_match.group(1).strip()
-        else:
-            result['campaign'] = 'Campaign'
-    
-    return result
 
 def scan_output_directory():
     """Scan output directory for generated content"""
@@ -292,10 +175,8 @@ def scan_output_directory():
 async def generate_banner_direct(campaign_name, brand_name, banner_type, message, cta):
     """Generate banner by calling MCP server directly"""
     try:
-        # Import the banner generation function
         from banner_mcp_server import generate_banner
         
-        # Call the function
         result_json = await generate_banner(
             campaign_name=campaign_name,
             brand_name=brand_name,
@@ -327,8 +208,8 @@ async def validate_banner_direct(filepath, campaign_name, brand_name, message, c
     except Exception as e:
         return {"error": str(e)}
 
-async def generate_video_direct(campaign_name, brand_name, video_type, description, resolution, aspect_ratio, input_image_path=""):
-    """Generate video by calling MCP server directly - supports image-to-video"""
+async def generate_video_direct(campaign_name, brand_name, video_type, description, resolution, aspect_ratio, input_image_path="", model="veo"):
+    """Generate video by calling MCP server directly - supports both models"""
     try:
         from video_mcp_server import generate_video
         
@@ -339,7 +220,8 @@ async def generate_video_direct(campaign_name, brand_name, video_type, descripti
             description=description,
             resolution=resolution,
             aspect_ratio=aspect_ratio,
-            input_image_path=input_image_path  # NEW: Support for image-to-video
+            input_image_path=input_image_path,
+            model=model  # NEW: Pass model selection
         )
         
         result = json.loads(result_json)
@@ -364,6 +246,28 @@ def main():
             st.metric("📱 Banners", banners)
         with col2:
             st.metric("🎬 Videos", videos)
+        
+        st.markdown("---")
+        
+        # VIDEO MODEL SELECTION
+        st.markdown("### 🎬 Video Model")
+        video_model = st.radio(
+            "Select AI Model:",
+            options=['veo', 'runway'],
+            format_func=lambda x: {
+                'veo': '🔵 Google Veo 3.1 (Recommended)',
+                'runway': '🟣 RunwayML Gen-3 Alpha'
+            }[x],
+            help="Choose which AI model to use for video generation",
+            key='video_model_selector'
+        )
+        st.session_state.selected_video_model = video_model
+        
+        # Show model info
+        if video_model == 'veo':
+            st.info("**Veo 3.1**: High quality, supports image-to-video, 4-8 seconds, 1-3 min generation")
+        else:
+            st.info("**RunwayML**: Fast generation, up to 8 seconds, ~2 min generation")
         
         st.markdown("---")
         
@@ -427,17 +331,13 @@ def main():
             st.markdown("---")
             
             try:
-                # Import the agent
                 from agent import fast
                 
-                # Build conversation history for the agent
                 async def run_agent_with_conversation(prompt, history):
                     async with fast.run() as agent:
-                        # If there's conversation history, include context
                         if history:
-                            # Build conversation context
                             context_messages = []
-                            for msg in history[-6:]:  # Last 3 exchanges (6 messages)
+                            for msg in history[-6:]:
                                 context_messages.append(f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}")
                             
                             full_context = "\n\n".join(context_messages)
@@ -445,18 +345,15 @@ def main():
                         else:
                             full_prompt = prompt
                         
-                        # Call the agent
                         response = await agent.marketing_orchestrator.send(full_prompt)
                         return response
                 
-                # Run the agent with conversation history
                 with st.spinner("🤖 Agent is thinking..."):
                     result = asyncio.run(run_agent_with_conversation(
                         user_prompt, 
                         st.session_state.agent_conversation
                     ))
                     
-                    # Add to conversation history
                     st.session_state.agent_conversation.append({
                         'role': 'user',
                         'content': user_prompt
@@ -466,7 +363,6 @@ def main():
                         'content': result
                     })
                     
-                    # Show success and rerun to update display
                     st.success("✅ Message sent!")
                     st.rerun()
                     
@@ -494,13 +390,11 @@ def main():
                 
                 submitted = st.form_submit_button("🎨 Generate Banner", type="primary", use_container_width=True)
             
-            # Handle submission OUTSIDE the form
             if submitted:
                 if not all([campaign, brand, message, cta]):
                     st.error("Please fill in all required fields")
                 else:
                     with st.spinner("🎨 Generating banner... (10-30 seconds)"):
-                        # Generate
                         result = asyncio.run(generate_banner_direct(campaign, brand, banner_type, message, cta))
                         
                         if "error" in result:
@@ -509,7 +403,6 @@ def main():
                             filepath = result['filepath']
                             st.success(f"✅ Banner generated: {result['filename']}")
                             
-                            # Validate
                             with st.spinner("🔍 Validating..."):
                                 val_result = asyncio.run(validate_banner_direct(filepath, campaign, brand, message, cta))
                                 
@@ -529,7 +422,6 @@ def main():
                                         for issue in val_result['issues']:
                                             st.write(f"• {issue}")
                             
-                            # Display preview (NOW OUTSIDE FORM)
                             st.markdown("### 📦 Preview")
                             metadata = load_metadata(filepath)
                             display_banner(filepath, metadata, key_suffix="create_preview")
@@ -539,6 +431,9 @@ def main():
         # VIDEO CREATION
         with col_video:
             st.markdown("#### 🎬 Create Video")
+            
+            # Show selected model
+            st.info(f"**Current Model:** {st.session_state.selected_video_model.upper()} (change in sidebar)")
             
             with st.form("video_form"):
                 v_campaign = st.text_input("Campaign Name*", "Product Launch", help="Name of your campaign")
@@ -558,14 +453,14 @@ def main():
                 
                 v_submitted = st.form_submit_button("🎬 Generate Video", type="primary", use_container_width=True)
             
-            # Handle submission OUTSIDE the form
             if v_submitted:
                 if not all([v_campaign, v_brand, v_description]):
                     st.error("Please fill in all required fields")
                 else:
-                    with st.spinner("🎬 Generating video... This takes 1-3 minutes. Please wait..."):
+                    with st.spinner(f"🎬 Generating video with {st.session_state.selected_video_model.upper()}... This takes 1-3 minutes. Please wait..."):
                         result = asyncio.run(generate_video_direct(
-                            v_campaign, v_brand, v_type, v_description, v_resolution, v_aspect
+                            v_campaign, v_brand, v_type, v_description, v_resolution, v_aspect, 
+                            model=st.session_state.selected_video_model
                         ))
                         
                         if "error" in result:
@@ -574,7 +469,6 @@ def main():
                             st.success(f"✅ Video generated: {result['filename']}")
                             st.info("ℹ️ Please review the video manually")
                             
-                            # Display preview (NOW OUTSIDE FORM)
                             st.markdown("### 📦 Preview")
                             filepath = result['filepath']
                             metadata = load_metadata(filepath)
@@ -588,15 +482,17 @@ def main():
         st.markdown("### ✨ Animate Banner Into Video")
         st.caption("Turn an existing banner into a dynamic video with motion and effects")
         
+        # Show selected model
+        st.info(f"**Current Model:** {st.session_state.selected_video_model.upper()} (change in sidebar)")
+        
         with st.form("image_to_video_form"):
-            # Get available banners
             outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
             banner_files = []
             if os.path.exists(outputs_dir):
                 banner_files = [f for f in os.listdir(outputs_dir) if f.startswith('banner_') and f.endswith('.png')]
             
             if not banner_files:
-                st.info("📭 No banners available yet. Create a banner first, then come back to animate it!")
+                st.info("🔭 No banners available yet. Create a banner first, then come back to animate it!")
                 st.form_submit_button("Generate (No banners available)", disabled=True)
             else:
                 selected_banner = st.selectbox("Select Banner*", banner_files, 
@@ -624,18 +520,16 @@ def main():
                 
                 i2v_submitted = st.form_submit_button("✨ Animate Banner", type="primary", use_container_width=True)
         
-        # Handle submission OUTSIDE the form
         if banner_files and i2v_submitted:
             if not all([selected_banner, i2v_campaign, i2v_brand, i2v_description]):
                 st.error("Please fill in all required fields")
             else:
                 banner_path = os.path.join(outputs_dir, selected_banner)
                 
-                # Show preview of selected banner
                 st.markdown("#### 🖼️ Source Banner")
                 st.image(banner_path, width=400)
                 
-                with st.spinner("✨ Animating banner into video... This takes 1-3 minutes. Please wait..."):
+                with st.spinner(f"✨ Animating banner into video with {st.session_state.selected_video_model.upper()}... This takes 1-3 minutes. Please wait..."):
                     result = asyncio.run(generate_video_direct(
                         i2v_campaign, 
                         i2v_brand, 
@@ -643,7 +537,8 @@ def main():
                         i2v_description, 
                         i2v_resolution, 
                         i2v_aspect,
-                        input_image_path=banner_path  # KEY: Pass the banner path
+                        input_image_path=banner_path,
+                        model=st.session_state.selected_video_model
                     ))
                     
                     if "error" in result:
@@ -652,7 +547,6 @@ def main():
                         st.success(f"✅ Video generated from banner: {result['filename']}")
                         st.info("🎬 Your banner has been animated with motion!")
                         
-                        # Display preview
                         st.markdown("### 📦 Video Preview")
                         filepath = result['filepath']
                         metadata = load_metadata(filepath)
@@ -666,7 +560,7 @@ def main():
         content = scan_output_directory()
         
         if not content:
-            st.info("📭 No content yet. Go to the Create Content tab to generate your first banner or video!")
+            st.info("🔭 No content yet. Go to the Create Content tab to generate your first banner or video!")
         else:
             filter_type = st.radio("Filter:", ["All", "Banners Only", "Videos Only"], horizontal=True)
             
