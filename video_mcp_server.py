@@ -156,14 +156,9 @@ async def generate_video(
             resolution, aspect_ratio, input_image_path, additional_instructions
         )
     elif model == "runway":
-        # Check if image-to-video is requested with RunwayML
-        if input_image_path:
-            return json.dumps({
-                "error": "RunwayML does not support image-to-video. Please use Veo model for this feature."
-            })
         return await generate_video_runway(
             campaign_name, brand_name, video_type, description,
-            resolution, aspect_ratio, additional_instructions
+            resolution, aspect_ratio, input_image_path, additional_instructions
         )
     else:
         return json.dumps({
@@ -363,9 +358,10 @@ async def generate_video_runway(
     description: str,
     resolution: str = "720p",
     aspect_ratio: str = "16:9",
+    input_image_path: str = "",
     additional_instructions: str = ""
 ) -> str:
-    """Generate video using RunwayML Gen-3 Alpha API"""
+    """Generate video using RunwayML Gen-3 Alpha API - supports image-to-video"""
     
     # Check API key
     api_key = os.getenv("RUNWAYML_API_KEY")
@@ -373,6 +369,15 @@ async def generate_video_runway(
         return json.dumps({
             "error": "RUNWAYML_API_KEY environment variable not set"
         })
+    
+    # Check if input image path is provided
+    has_input_image = bool(input_image_path and input_image_path.strip())
+    if has_input_image:
+        if not os.path.exists(input_image_path):
+            return json.dumps({
+                "error": f"Input image not found: {input_image_path}"
+            })
+        print(f"🖼️  Input image for RunwayML: {input_image_path}")
     
     # Generate enhanced prompt
     specs = VIDEO_SPECS[video_type]
@@ -403,27 +408,56 @@ VISUAL ELEMENTS:
         prompt += f"\n\nADDITIONAL REQUIREMENTS:\n{additional_instructions}"
     
     try:
-        # Call RunwayML API
         headers = {
             "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "X-Runway-Version": "2024-11-06"
         }
         
-        # Map aspect ratio to RunwayML format
-        runway_ratio = "16:9" if aspect_ratio == "16:9" else "9:16"
+        # Map aspect ratio to RunwayML format (using resolution format for 2024-11-06 version)
+        # For Gen-3 Alpha Turbo: use resolution format like "1280:768" or "768:1280"
+        runway_ratio = "1280:768" if aspect_ratio == "16:9" else "768:1280"
+        
+        # RunwayML Gen-3 Alpha Turbo only supports 5 or 10 second durations
+        # Map our durations to RunwayML's supported durations
+        if specs['duration'] <= 5:
+            runway_duration = 5
+        else:
+            runway_duration = 10
         
         payload = {
             "promptText": prompt,
             "model": "gen3a_turbo",
-            "duration": specs['duration'],
+            "duration": runway_duration,
             "ratio": runway_ratio
         }
         
+        # Add image if provided (IMAGE-TO-VIDEO)
+        if has_input_image:
+            print(f"⏳ Uploading image to RunwayML...")
+            
+            # First, upload the image to get a URL
+            # RunwayML requires the image to be base64 encoded or hosted
+            import base64
+            
+            with open(input_image_path, 'rb') as f:
+                image_data = base64.b64encode(f.read()).decode('utf-8')
+            
+            # Determine image type
+            import mimetypes
+            mime_type, _ = mimetypes.guess_type(input_image_path)
+            if not mime_type:
+                mime_type = 'image/png'
+            
+            # Add promptImage for image-to-video
+            payload["promptImage"] = f"data:{mime_type};base64,{image_data}"
+            print(f"✅ Image encoded and added to payload")
+        
         print(f"⏳ Creating RunwayML generation task...")
         
-        # Create generation task
+        # Create generation task - CORRECT ENDPOINT
         response = requests.post(
-            "https://api.runwayml.com/v1/generations",
+            "https://api.dev.runwayml.com/v1/image_to_video",
             headers=headers,
             json=payload,
             timeout=30
@@ -443,15 +477,20 @@ VISUAL ELEMENTS:
             })
         
         print(f"✅ Task created: {task_id}")
-        print(f"⏳ Waiting for video generation (this takes 1-3 minutes)...")
+        
+        if has_input_image:
+            print(f"⏳ Generating {runway_duration}s video from image (this takes 1-3 minutes)...")
+        else:
+            print(f"⏳ Generating {runway_duration}s video from text (this takes 1-3 minutes)...")
         
         # Poll for completion
         max_attempts = 60  # 5 minutes max
         for attempt in range(max_attempts):
             time.sleep(5)  # Check every 5 seconds
             
+            # CORRECT ENDPOINT - Use tasks endpoint to check status
             status_response = requests.get(
-                f"https://api.runwayml.com/v1/generations/{task_id}",
+                f"https://api.dev.runwayml.com/v1/tasks/{task_id}",
                 headers=headers,
                 timeout=30
             )
@@ -474,7 +513,8 @@ VISUAL ELEMENTS:
                 
                 if video_response.status_code == 200:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    filename = f"video_{video_type}_{specs['duration']}s_{timestamp}.mp4"
+                    source_type = "image" if has_input_image else "text"
+                    filename = f"video_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
                     
                     # Save to outputs directory
                     output_dir = os.path.join(os.path.dirname(__file__), "outputs")
@@ -496,6 +536,8 @@ VISUAL ELEMENTS:
                         "description": description,
                         "resolution": resolution,
                         "aspect_ratio": aspect_ratio,
+                        "source_type": source_type,
+                        "input_image": input_image_path if has_input_image else None,
                         "additional_instructions": additional_instructions,
                         "filename": filename,
                         "filepath": filepath,
@@ -517,6 +559,8 @@ VISUAL ELEMENTS:
                         "duration": specs['duration'],
                         "resolution": resolution,
                         "aspect_ratio": aspect_ratio,
+                        "source_type": source_type,
+                        "input_image": input_image_path if has_input_image else None,
                         "file_size_mb": round(file_size, 2),
                         "model": "gen3a_turbo",
                         "metadata_file": metadata_file
@@ -536,7 +580,6 @@ VISUAL ELEMENTS:
             
     except Exception as e:
         return json.dumps({"error": f"RunwayML API error: {str(e)}"})
-
 
 async def validate_video(
     filepath: str,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-STREAMLIT WEB INTERFACE - WITH MODEL SELECTION
+STREAMLIT WEB INTERFACE - WITH MODEL SELECTION AND IMAGE UPLOAD
 Direct MCP tool calls without agent
 """
 
@@ -77,6 +77,8 @@ if 'generation_log' not in st.session_state:
     st.session_state.generation_log = []
 if 'selected_video_model' not in st.session_state:
     st.session_state.selected_video_model = 'veo'  # Default to Veo 3.1
+if 'agent_conversation' not in st.session_state:
+    st.session_state.agent_conversation = []
 
 # Helper functions
 def load_metadata(filepath):
@@ -172,7 +174,7 @@ def scan_output_directory():
     content.sort(key=lambda x: x['timestamp'], reverse=True)
     return content
 
-async def generate_banner_direct(campaign_name, brand_name, banner_type, message, cta):
+async def generate_banner_direct(campaign_name, brand_name, banner_type, message, cta, reference_image_path=""):
     """Generate banner by calling MCP server directly"""
     try:
         from banner_mcp_server import generate_banner
@@ -182,7 +184,8 @@ async def generate_banner_direct(campaign_name, brand_name, banner_type, message
             brand_name=brand_name,
             banner_type=banner_type,
             message=message,
-            cta=cta
+            cta=cta,
+            reference_image_path=reference_image_path
         )
         
         result = json.loads(result_json)
@@ -209,7 +212,7 @@ async def validate_banner_direct(filepath, campaign_name, brand_name, message, c
         return {"error": str(e)}
 
 async def generate_video_direct(campaign_name, brand_name, video_type, description, resolution, aspect_ratio, input_image_path="", model="veo"):
-    """Generate video by calling MCP server directly - supports both models"""
+    """Generate video by calling MCP server directly - supports both models and image-to-video"""
     try:
         from video_mcp_server import generate_video
         
@@ -221,7 +224,7 @@ async def generate_video_direct(campaign_name, brand_name, video_type, descripti
             resolution=resolution,
             aspect_ratio=aspect_ratio,
             input_image_path=input_image_path,
-            model=model  # NEW: Pass model selection
+            model=model
         )
         
         result = json.loads(result_json)
@@ -265,9 +268,9 @@ def main():
         
         # Show model info
         if video_model == 'veo':
-            st.info("**Veo 3.1**: High quality, supports image-to-video, 4-8 seconds, 1-3 min generation")
+            st.info("**Veo 3.1**: High quality, up to 8 second long videos, takes 1 to 3 minutes to generate video")
         else:
-            st.info("**RunwayML**: Fast generation, up to 8 seconds, ~2 min generation")
+            st.info("**RunwayML**: Fast generation, up to 10 second long videos, takes 2 min to generate video")
         
         st.markdown("---")
         
@@ -296,10 +299,6 @@ def main():
         st.markdown("#### 💬 Interactive AI Agent Chat")
         st.caption("Have a conversation with the AI agent - it will understand your requests and handle everything automatically")
         
-        # Initialize conversation history in session state
-        if 'agent_conversation' not in st.session_state:
-            st.session_state.agent_conversation = []
-        
         # Display conversation history
         if st.session_state.agent_conversation:
             st.markdown("##### 📜 Conversation History")
@@ -325,10 +324,40 @@ def main():
                 height=100,
                 help="The agent maintains conversation context - you can ask follow-up questions!"
             )
+            
+            # IMAGE UPLOAD for AI agent
+            st.markdown("##### 📎 Optional: Attach Image")
+            agent_image = st.file_uploader(
+                "Upload an image with your prompt",
+                type=['png', 'jpg', 'jpeg'],
+                help="Upload an image for style reference (banner) or to animate (video)",
+                key="agent_upload_img"
+            )
+            
             prompt_submit = st.form_submit_button("💬 Send Message", type="primary", use_container_width=True)
         
         if prompt_submit and user_prompt:
             st.markdown("---")
+            
+            # Save uploaded image if provided
+            agent_image_path = ""
+            if agent_image is not None:
+                outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                if not os.path.exists(outputs_dir):
+                    os.makedirs(outputs_dir)
+                
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                agent_img_filename = f"agent_upload_{timestamp}_{agent_image.name}"
+                agent_image_path = os.path.join(outputs_dir, agent_img_filename)
+                
+                with open(agent_image_path, 'wb') as f:
+                    f.write(agent_image.getbuffer())
+                
+                st.info(f"📎 Image attached: {agent_img_filename}")
+                st.image(agent_image_path, caption="Attached image", width=300)
+                
+                # Add image path to prompt context
+                user_prompt += f"\n\n[ATTACHED_IMAGE: {agent_image_path}]"
             
             try:
                 from agent import fast
@@ -388,14 +417,42 @@ def main():
                 message = st.text_input("Message*", "Up to 70% Off", help="Keep under 8 words")
                 cta = st.text_input("Call to Action*", "Shop Now", help="1-3 words like 'Shop Now'")
                 
+                # IMAGE UPLOAD for style reference
+                st.markdown("##### 🎨 Optional: Upload Reference Image")
+                reference_image = st.file_uploader(
+                    "Upload an image for style inspiration (optional)",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Upload a reference image to guide the style, colors, and composition",
+                    key="banner_ref_img"
+                )
+                
                 submitted = st.form_submit_button("🎨 Generate Banner", type="primary", use_container_width=True)
             
             if submitted:
                 if not all([campaign, brand, message, cta]):
                     st.error("Please fill in all required fields")
                 else:
+                    # Save reference image if uploaded
+                    reference_image_path = ""
+                    if reference_image is not None:
+                        outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                        if not os.path.exists(outputs_dir):
+                            os.makedirs(outputs_dir)
+                        
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        ref_filename = f"reference_{timestamp}_{reference_image.name}"
+                        reference_image_path = os.path.join(outputs_dir, ref_filename)
+                        
+                        with open(reference_image_path, 'wb') as f:
+                            f.write(reference_image.getbuffer())
+                        
+                        st.info(f"📎 Reference image saved: {ref_filename}")
+                    
                     with st.spinner("🎨 Generating banner... (10-30 seconds)"):
-                        result = asyncio.run(generate_banner_direct(campaign, brand, banner_type, message, cta))
+                        result = asyncio.run(generate_banner_direct(
+                            campaign, brand, banner_type, message, cta, 
+                            reference_image_path=reference_image_path
+                        ))
                         
                         if "error" in result:
                             st.error(f"❌ Error: {result['error']}")
@@ -451,15 +508,42 @@ def main():
                 with col2:
                     v_aspect = st.selectbox("Aspect Ratio*", ["16:9", "9:16"])
                 
+                # IMAGE UPLOAD for image-to-video
+                st.markdown("##### 🎬 Optional: Upload Image to Animate")
+                v_input_image = st.file_uploader(
+                    "Upload an image to animate into video (optional)",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Upload an image that will be animated with the motion description above",
+                    key="video_input_img"
+                )
+                
                 v_submitted = st.form_submit_button("🎬 Generate Video", type="primary", use_container_width=True)
             
             if v_submitted:
                 if not all([v_campaign, v_brand, v_description]):
                     st.error("Please fill in all required fields")
                 else:
+                    # Save input image if uploaded
+                    v_input_image_path = ""
+                    if v_input_image is not None:
+                        outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                        if not os.path.exists(outputs_dir):
+                            os.makedirs(outputs_dir)
+                        
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        input_filename = f"video_input_{timestamp}_{v_input_image.name}"
+                        v_input_image_path = os.path.join(outputs_dir, input_filename)
+                        
+                        with open(v_input_image_path, 'wb') as f:
+                            f.write(v_input_image.getbuffer())
+                        
+                        st.info(f"📎 Input image saved: {input_filename}")
+                        st.image(v_input_image_path, caption="Image to animate", width=300)
+                    
                     with st.spinner(f"🎬 Generating video with {st.session_state.selected_video_model.upper()}... This takes 1-3 minutes. Please wait..."):
                         result = asyncio.run(generate_video_direct(
                             v_campaign, v_brand, v_type, v_description, v_resolution, v_aspect, 
+                            input_image_path=v_input_image_path,
                             model=st.session_state.selected_video_model
                         ))
                         
