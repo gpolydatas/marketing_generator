@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-STREAMLIT WEB INTERFACE - WITH MODEL SELECTION AND IMAGE UPLOAD
-Direct MCP tool calls without agent
+STREAMLIT WEB INTERFACE - WITH MODEL SELECTION IN FORM
+Model selection moved from sidebar to video form
 """
 
 import streamlit as st
@@ -75,8 +75,6 @@ st.markdown("""
 # Initialize session state
 if 'generation_log' not in st.session_state:
     st.session_state.generation_log = []
-if 'selected_video_model' not in st.session_state:
-    st.session_state.selected_video_model = 'veo'  # Default to Veo 3.1
 if 'agent_conversation' not in st.session_state:
     st.session_state.agent_conversation = []
 
@@ -252,28 +250,6 @@ def main():
         
         st.markdown("---")
         
-        # VIDEO MODEL SELECTION
-        st.markdown("### 🎬 Video Model")
-        video_model = st.radio(
-            "Select AI Model:",
-            options=['veo', 'runway'],
-            format_func=lambda x: {
-                'veo': '🔵 Google Veo 3.1 (Recommended)',
-                'runway': '🟣 RunwayML Gen-3 Alpha'
-            }[x],
-            help="Choose which AI model to use for video generation",
-            key='video_model_selector'
-        )
-        st.session_state.selected_video_model = video_model
-        
-        # Show model info
-        if video_model == 'veo':
-            st.info("**Veo 3.1**: High quality, up to 8 second long videos, takes 1 to 3 minutes to generate video")
-        else:
-            st.info("**RunwayML**: Fast generation, up to 10 second long videos, takes 2 min to generate video")
-        
-        st.markdown("---")
-        
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
         
@@ -326,7 +302,7 @@ def main():
             )
             
             # IMAGE UPLOAD for AI agent
-            st.markdown("##### 📎 Optional: Attach Image")
+            st.markdown("##### 🔎 Optional: Attach Image")
             agent_image = st.file_uploader(
                 "Upload an image with your prompt",
                 type=['png', 'jpg', 'jpeg'],
@@ -353,7 +329,7 @@ def main():
                 with open(agent_image_path, 'wb') as f:
                     f.write(agent_image.getbuffer())
                 
-                st.info(f"📎 Image attached: {agent_img_filename}")
+                st.info(f"🔎 Image attached: {agent_img_filename}")
                 st.image(agent_image_path, caption="Attached image", width=300)
                 
                 # Add image path to prompt context
@@ -446,7 +422,7 @@ def main():
                         with open(reference_image_path, 'wb') as f:
                             f.write(reference_image.getbuffer())
                         
-                        st.info(f"📎 Reference image saved: {ref_filename}")
+                        st.info(f"🔎 Reference image saved: {ref_filename}")
                     
                     with st.spinner("🎨 Generating banner... (10-30 seconds)"):
                         result = asyncio.run(generate_banner_direct(
@@ -489,10 +465,28 @@ def main():
         with col_video:
             st.markdown("#### 🎬 Create Video")
             
-            # Show selected model
-            st.info(f"**Current Model:** {st.session_state.selected_video_model.upper()} (change in sidebar)")
-            
             with st.form("video_form"):
+                # MODEL SELECTION MOVED HERE
+                st.markdown("##### 🎥 AI Model Selection")
+                video_model = st.radio(
+                    "Select AI Model:",
+                    options=['veo', 'runway'],
+                    format_func=lambda x: {
+                        'veo': '🔵 Google Veo 3.1 (Recommended)',
+                        'runway': '🟣 RunwayML Gen-3 Alpha'
+                    }[x],
+                    help="Choose which AI model to use for video generation",
+                    horizontal=True
+                )
+                
+                # Show model info
+                if video_model == 'veo':
+                    st.info("**Veo 3.1**: High quality, up to 8 seconds, 1-3 min generation")
+                else:
+                    st.info("**RunwayML**: Fast generation, up to 10 seconds, ~2 min")
+                
+                st.markdown("---")
+                
                 v_campaign = st.text_input("Campaign Name*", "Product Launch", help="Name of your campaign")
                 v_brand = st.text_input("Brand Name*", "TechGear", help="Your brand name")
                 v_type = st.selectbox("Duration*", ["short", "standard", "extended"], 
@@ -537,14 +531,14 @@ def main():
                         with open(v_input_image_path, 'wb') as f:
                             f.write(v_input_image.getbuffer())
                         
-                        st.info(f"📎 Input image saved: {input_filename}")
+                        st.info(f"🔎 Input image saved: {input_filename}")
                         st.image(v_input_image_path, caption="Image to animate", width=300)
                     
-                    with st.spinner(f"🎬 Generating video with {st.session_state.selected_video_model.upper()}... This takes 1-3 minutes. Please wait..."):
+                    with st.spinner(f"🎬 Generating video with {video_model.upper()}... This takes 1-3 minutes. Please wait..."):
                         result = asyncio.run(generate_video_direct(
                             v_campaign, v_brand, v_type, v_description, v_resolution, v_aspect, 
                             input_image_path=v_input_image_path,
-                            model=st.session_state.selected_video_model
+                            model=video_model
                         ))
                         
                         if "error" in result:
@@ -566,10 +560,29 @@ def main():
         st.markdown("### ✨ Animate Banner Into Video")
         st.caption("Turn an existing banner into a dynamic video with motion and effects")
         
-        # Show selected model
-        st.info(f"**Current Model:** {st.session_state.selected_video_model.upper()} (change in sidebar)")
-        
         with st.form("image_to_video_form"):
+            # MODEL SELECTION IN IMAGE-TO-VIDEO FORM
+            st.markdown("##### 🎥 AI Model Selection")
+            i2v_model = st.radio(
+                "Select AI Model:",
+                options=['veo', 'runway'],
+                format_func=lambda x: {
+                    'veo': '🔵 Google Veo 3.1 (Recommended)',
+                    'runway': '🟣 RunwayML Gen-3 Alpha'
+                }[x],
+                help="Choose which AI model to use for video generation",
+                horizontal=True,
+                key="i2v_model_selector"
+            )
+            
+            # Show model info
+            if i2v_model == 'veo':
+                st.info("**Veo 3.1**: High quality, up to 8 seconds, 1-3 min generation")
+            else:
+                st.info("**RunwayML**: Fast generation, up to 10 seconds, ~2 min")
+            
+            st.markdown("---")
+            
             outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
             banner_files = []
             if os.path.exists(outputs_dir):
@@ -613,7 +626,7 @@ def main():
                 st.markdown("#### 🖼️ Source Banner")
                 st.image(banner_path, width=400)
                 
-                with st.spinner(f"✨ Animating banner into video with {st.session_state.selected_video_model.upper()}... This takes 1-3 minutes. Please wait..."):
+                with st.spinner(f"✨ Animating banner into video with {i2v_model.upper()}... This takes 1-3 minutes. Please wait..."):
                     result = asyncio.run(generate_video_direct(
                         i2v_campaign, 
                         i2v_brand, 
@@ -622,7 +635,7 @@ def main():
                         i2v_resolution, 
                         i2v_aspect,
                         input_image_path=banner_path,
-                        model=st.session_state.selected_video_model
+                        model=i2v_model
                     ))
                     
                     if "error" in result:
