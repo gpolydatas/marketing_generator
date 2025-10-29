@@ -64,6 +64,21 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Optional: Full path to reference image for image-to-image generation (style transfer, inspiration)",
                         "default": ""
+                    },
+                    "font_family": {
+                        "type": "string",
+                        "description": "Optional: Font family to use (Arial, Helvetica, Times New Roman, Georgia, Verdana, Courier, Impact)",
+                        "default": "Arial"
+                    },
+                    "primary_color": {
+                        "type": "string",
+                        "description": "Optional: Primary color hex code (e.g., #FFFFFF)",
+                        "default": "#FFFFFF"
+                    },
+                    "secondary_color": {
+                        "type": "string",
+                        "description": "Optional: Secondary/accent color hex code (e.g., #000000)",
+                        "default": "#000000"
                     }
                 },
                 "required": ["campaign_name", "brand_name", "banner_type", "message", "cta"]
@@ -125,9 +140,13 @@ async def generate_banner(
     message: str,
     cta: str,
     additional_instructions: str = "",
-    reference_image_path: str = ""
+    reference_image_path: str = "",
+    font_family: str = "Arial",
+    primary_color: str = "#FFFFFF",
+    secondary_color: str = "#000000",
+    weather_data: dict = None
 ) -> str:
-    """Generate banner image using DALL-E 3 with optional reference image"""
+    """Generate banner image using DALL-E 3 with optional reference image, font, color customization, and weather conditions"""
     
     # Validate banner type
     if banner_type not in BANNER_SPECS:
@@ -142,25 +161,88 @@ async def generate_banner(
             "error": "OPENAI_API_KEY environment variable not set"
         })
     
+    # Build weather scene description
+    weather_scene = ""
+    if weather_data and isinstance(weather_data, dict) and "error" not in weather_data:
+        condition = weather_data.get('condition', '').lower()
+        temp = weather_data.get('temperature', 20)
+        description = weather_data.get('description', '')
+        
+        # Map weather conditions to visual scene modifications
+        if 'rain' in condition or 'rain' in description:
+            weather_scene = "Scene shows rainy weather: wet surfaces, raindrops, puddles, gray overcast sky, rain falling"
+        elif 'snow' in condition or 'snow' in description:
+            weather_scene = "Scene shows snowy weather: snow falling, snow on ground, cold atmosphere, white/gray sky"
+        elif 'storm' in condition or 'thunder' in condition:
+            weather_scene = "Scene shows stormy weather: dark dramatic clouds, lightning, heavy rain, intense atmosphere"
+        elif 'cloud' in condition or 'overcast' in description:
+            weather_scene = "Scene shows cloudy/overcast weather: gray clouds, diffused light, muted colors, cool atmosphere"
+        elif 'clear' in condition or 'sun' in description:
+            if temp > 25:
+                weather_scene = "Scene shows hot sunny weather: bright sunshine, strong shadows, warm golden light, clear blue sky, heat haze"
+            else:
+                weather_scene = "Scene shows clear pleasant weather: blue sky, soft sunlight, comfortable atmosphere"
+        elif 'mist' in condition or 'fog' in description:
+            weather_scene = "Scene shows misty/foggy weather: reduced visibility, fog, hazy atmosphere, muted tones"
+        else:
+            weather_scene = f"Scene reflects current weather: {description}"
+    
     # Generate prompt
     specs = BANNER_SPECS[banner_type]
     
-    # ENHANCED PROMPT - Focus on text clarity and accuracy
-    prompt = f"""Create a professional banner advertisement for {brand_name}'s {campaign_name}.
+    # Add reference image guidance if provided
+    reference_image_context = ""
+    use_variation = False
+    
+    if reference_image_path and os.path.exists(reference_image_path):
+        use_variation = True
+        reference_image_context = f" (using {os.path.basename(reference_image_path)} as base)"
+        
+        # SHORT PROMPT for edit mode (max 1000 chars)
+        prompt = f"""Modify this image to show different weather conditions while adding text.
+
+{weather_scene if weather_scene else "Keep the current weather/atmosphere."}
+
+Add advertising text:
+Brand: "{brand_name}" (large, bold)
+Message: "{message}" (clear)
+CTA: "{cta}" (on button)
+
+Style:
+- Font: {font_family}
+- Colors: {primary_color}, {secondary_color}
+- Professional banner ad
+- Text must be exact and legible"""
+        
+        if additional_instructions:
+            prompt += f"\n\nNotes: {additional_instructions[:150]}"
+    else:
+        # FULL PROMPT for generation mode
+        prompt = f"""Create a professional banner advertisement for {brand_name}'s {campaign_name}.
 
 CRITICAL - TEXT MUST BE EXACT AND LEGIBLE:
 - Brand name: "{brand_name}" (spell exactly, make it LARGE and BOLD)
 - Main message: "{message}" (use these exact words, make it clear and readable)  
 - CTA button: "{cta}" (spell exactly, put on a prominent button)
 
+TYPOGRAPHY REQUIREMENTS:
+- Font style: {font_family} or similar clean, professional font
+- High contrast and legibility are critical
+- Text must be sharp and clear
+
+COLOR SCHEME REQUIREMENTS:
+- Primary color: {primary_color} (use for main elements, backgrounds, or key accents)
+- Secondary color: {secondary_color} (use for text, buttons, or contrast elements)
+- Create a harmonious palette using these colors
+- Ensure excellent contrast between text and background
+- Professional, eye-catching color application
+
 DESIGN REQUIREMENTS:
 - Dimensions: {specs['width']}x{specs['height']} pixels
 - Style: Clean, modern, professional advertising
 - Layout: Simple and uncluttered - text must be the focus
-- Typography: Sans-serif fonts, high contrast, very legible
 - Brand prominence: Brand name is the largest element
-- CTA visibility: Call-to-action button stands out with bright color
-- Color scheme: Professional, vibrant, eye-catching
+- CTA visibility: Call-to-action button stands out
 - Background: Clean or subtle - must not interfere with text readability
 
 TEXT HIERARCHY (in order of size):
@@ -174,21 +256,15 @@ CRITICAL RULES:
 - No complex patterns behind text
 - High contrast between text and background
 - Professional advertising quality
+- Use the specified font and color scheme
 
 Make the text perfect - that's the priority."""
+        
+        # Add additional instructions if provided
+        if additional_instructions:
+            prompt += f"\n\nIMPROVEMENTS FOR THIS ATTEMPT:\n{additional_instructions}"
+            prompt += f"\n\nREMINDER: Brand='{brand_name}', Message='{message}', CTA='{cta}' - spell exactly!"
     
-    # Add additional instructions if provided
-    if additional_instructions:
-        prompt += f"\n\nIMPROVEMENTS FOR THIS ATTEMPT:\n{additional_instructions}"
-        prompt += f"\n\nREMINDER: Brand='{brand_name}', Message='{message}', CTA='{cta}' - spell exactly!"
-    
-    # Add reference image guidance if provided
-    reference_image_context = ""
-    if reference_image_path and os.path.exists(reference_image_path):
-        prompt += f"\n\nSTYLE REFERENCE: Use the uploaded reference image as inspiration for style, composition, color scheme, and mood. Maintain the creative direction shown in the reference while incorporating the required text elements perfectly."
-        reference_image_context = f" (with style reference from {os.path.basename(reference_image_path)})"
-    
-    prompt = prompt[:4000]  # DALL-E limit
     
     # Initialize OpenAI client
     client = OpenAI(api_key=api_key)
@@ -205,7 +281,78 @@ Make the text perfect - that's the priority."""
         size = "1024x1792"
     
     try:
-        # Generate image
+        # When reference image provided, analyze with Vision then generate
+        if use_variation and reference_image_path:
+            print(f"\n{'='*60}")
+            print(f"🖼️  REFERENCE IMAGE MODE")
+            print(f"{'='*60}")
+            print(f"Reference: {os.path.basename(reference_image_path)}")
+            
+            # Analyze with GPT-4 Vision
+            with open(reference_image_path, "rb") as img_file:
+                img_data = base64.b64encode(img_file.read()).decode('utf-8')
+            
+            print(f"\n🔍 Analyzing image with GPT-4 Vision...")
+            vision_response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Describe this image's subject, style, composition, colors, lighting, and mood. Be specific. Under 150 words."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{img_data}"}
+                        }
+                    ]
+                }],
+                max_tokens=250
+            )
+            
+            style_desc = vision_response.choices[0].message.content
+            print(f"\n📊 VISION ANALYSIS:\n{style_desc}\n")
+            
+            # Print weather data
+            print(f"\n🌤️  WEATHER DATA:")
+            if weather_data:
+                for key, val in weather_data.items():
+                    print(f"  {key}: {val}")
+            else:
+                print("  None")
+            print(f"\n☁️  WEATHER SCENE DESCRIPTION:\n{weather_scene if weather_scene else 'None'}\n")
+            
+            # Build final prompt
+            final_prompt = f"""Professional banner ad inspired by: {style_desc}
+
+WEATHER TO SHOW: {weather_scene if weather_scene else "normal conditions"}
+
+TEXT (EXACT):
+Brand: "{brand_name}" (LARGE BOLD)
+Message: "{message}"
+CTA: "{cta}" (button)
+
+Style: {font_family}, colors {primary_color}/{secondary_color}
+Size: {width}x{height}px
+Text must be crystal clear"""
+
+            # Trim if needed
+            if len(final_prompt) > 4000:
+                final_prompt = final_prompt[:4000]
+            
+            print(f"\n📝 PROMPT TO DALL-E ({len(final_prompt)} chars):\n{'-'*60}\n{final_prompt}\n{'-'*60}\n")
+            
+            prompt = final_prompt
+        
+        else:
+            print(f"\n{'='*60}")
+            print(f"🎨 STANDARD GENERATION (no reference)")
+            print(f"{'='*60}\n")
+            print(f"Prompt length: {len(prompt)} chars\n")
+        
+        # Generate with DALL-E 3
+        print(f"🚀 Calling DALL-E 3 ({size})...")
         response = client.images.generate(
             model="dall-e-3",
             prompt=prompt,
@@ -216,7 +363,7 @@ Make the text perfect - that's the priority."""
         )
         
         image_url = response.data[0].url
-        revised_prompt = response.data[0].revised_prompt
+        revised_prompt = getattr(response.data[0], 'revised_prompt', prompt)
         
         # Download image
         import requests
@@ -247,6 +394,9 @@ Make the text perfect - that's the priority."""
                 "cta": cta,
                 "additional_instructions": additional_instructions,
                 "reference_image_path": reference_image_path if reference_image_path else None,
+                "font_family": font_family,
+                "primary_color": primary_color,
+                "secondary_color": secondary_color,
                 "filename": filename,
                 "filepath": filepath,
                 "url": image_url,
