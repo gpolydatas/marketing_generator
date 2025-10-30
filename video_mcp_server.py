@@ -196,6 +196,20 @@ async def generate_video_veo(
     
     # Generate enhanced prompt
     specs = VIDEO_SPECS[video_type]
+    actual_duration = specs['duration']
+    
+    # Veo API constraint: 1080p REQUIRES exactly 8 seconds duration
+    # If user requests 1080p with duration < 8s, we must either:
+    # 1. Change duration to 8s (breaks user expectation)
+    # 2. Change resolution to 720p (better option)
+    original_resolution = resolution
+    if resolution == "1080p" and actual_duration < 8:
+        resolution = "720p"
+        print(f"⚠️  Veo API requires 8s for 1080p. Adjusted resolution to 720p for {actual_duration}s video")
+        print(f"    To use 1080p, please select 'extended' video type (8 seconds)")
+    
+    # Note: 720p works with all durations (4, 6, 8)
+    # Note: 1080p ONLY works with 8 seconds
     
     prompt = f"""Create a professional promotional video for {brand_name}'s {campaign_name}.
 
@@ -204,7 +218,7 @@ VIDEO DESCRIPTION:
 
 VISUAL REQUIREMENTS:
 - Brand: {brand_name} - show branding naturally in the scene
-- Duration: {specs['duration']} seconds
+- Duration: {actual_duration} seconds
 - Style: Cinematic, professional, high-quality production
 - Smooth camera movements and transitions
 - Professional lighting and composition
@@ -256,13 +270,13 @@ TECHNICAL:
         config = types.GenerateVideosConfig(
             number_of_videos=1,
             resolution=resolution,
-            duration_seconds=specs['duration'],
+            duration_seconds=actual_duration,
             aspect_ratio=aspect_ratio
         )
         
         # Generate video
         if input_image:
-            print(f"⏳ Generating {specs['duration']}s video from image with Veo 3.1...")
+            print(f"⏳ Generating {actual_duration}s video from image with Veo 3.1...")
             operation = client.models.generate_videos(
                 model="veo-3.1-generate-preview",
                 prompt=prompt,
@@ -270,7 +284,7 @@ TECHNICAL:
                 config=config
             )
         else:
-            print(f"⏳ Generating {specs['duration']}s video from text with Veo 3.1...")
+            print(f"⏳ Generating {actual_duration}s video from text with Veo 3.1...")
             operation = client.models.generate_videos(
                 model="veo-3.1-generate-preview",
                 prompt=prompt,
@@ -295,7 +309,7 @@ TECHNICAL:
         # Download video
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         source_type = "image" if input_image else "text"
-        filename = f"video_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
+        filename = f"video_{video_type}_{actual_duration}s_{source_type}_{timestamp}.mp4"
         
         # Save to local outputs directory
         output_dir = os.path.join(os.path.dirname(__file__), "outputs")
@@ -315,9 +329,10 @@ TECHNICAL:
             "campaign": campaign_name,
             "brand": brand_name,
             "video_type": video_type,
-            "duration": specs['duration'],
+            "duration": actual_duration,
             "description": description,
-            "resolution": resolution,
+            "resolution_requested": original_resolution,
+            "resolution_used": resolution,
             "aspect_ratio": aspect_ratio,
             "source_type": source_type,
             "input_image": input_image_path if input_image else None,
@@ -326,7 +341,8 @@ TECHNICAL:
             "filepath": filepath,
             "file_size_mb": round(file_size, 2),
             "model": "veo-3.1-generate-preview",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "note": "Veo API requires 8s duration for 1080p resolution" if original_resolution != resolution else None
         }
         
         metadata_file = filepath.replace('.mp4', '.json')
@@ -337,14 +353,16 @@ TECHNICAL:
             "success": True,
             "filename": filename,
             "filepath": filepath,
-            "duration": specs['duration'],
-            "resolution": resolution,
+            "duration": actual_duration,
+            "resolution_requested": original_resolution,
+            "resolution_used": resolution,
             "aspect_ratio": aspect_ratio,
             "source_type": source_type,
             "input_image": input_image_path if input_image else None,
             "file_size_mb": round(file_size, 2),
             "model": "veo-3.1-generate-preview",
-            "metadata_file": metadata_file
+            "metadata_file": metadata_file,
+            "note": "Resolution adjusted to 720p (Veo requires 8s for 1080p)" if original_resolution != resolution else None
         }, indent=2)
             
     except Exception as e:
@@ -419,7 +437,7 @@ VISUAL ELEMENTS:
         runway_ratio = "1280:768" if aspect_ratio == "16:9" else "768:1280"
         
         # RunwayML Gen-3 Alpha Turbo only supports 5 or 10 second durations
-        # Map our durations to RunwayML's supported durations
+        # Map our durations (4, 6, 8) to RunwayML's supported durations
         if specs['duration'] <= 5:
             runway_duration = 5
         else:
