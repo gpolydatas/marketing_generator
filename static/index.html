@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <title>Marketing Content Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            border: 1px solid #e9ecef;
+        }
+
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input {
+            width: auto;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-generate {
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+        }
+
+        .btn-generate:hover {
+            box-shadow: 0 10px 20px rgba(39, 174, 96, 0.3);
+        }
+
+        .output-section {
+            grid-column: 1 / -1;
+        }
+
+        .output-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            border: 2px dashed #e9ecef;
+            min-height: 200px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            display: none;
+        }
+
+        .preview {
+            max-width: 100%;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .file-info {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #d1edff;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-weight: 600;
+            color: #6c757d;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .color-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .color-preview {
+            width: 30px;
+            height: 30px;
+            border-radius: 5px;
+            border: 2px solid #ddd;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 Marketing Content Generator</h1>
+            <p>Create stunning banners and videos with AI</p>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('banner')">📱 Banner Generator</button>
+                    <button class="tab" onclick="switchTab('video')">🎬 Video Generator</button>
+                </div>
+
+                <!-- Banner Tab -->
+                <div id="banner-tab" class="tab-content active">
+                    <h2>Create Banner Ad</h2>
+                    
+                    <div class="form-group">
+                        <label for="campaign-name">Campaign Name</label>
+                        <input type="text" id="campaign-name" placeholder="e.g., Black Friday Sale">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="brand-name">Brand Name</label>
+                        <input type="text" id="brand-name" placeholder="e.g., TechStore">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="banner-type">Banner Type</label>
+                        <select id="banner-type">
+                            <option value="social">Social Media (1200×628)</option>
+                            <option value="leaderboard">Leaderboard (728×90)</option>
+                            <option value="square">Square (1024×1024)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="message">Main Message</label>
+                        <input type="text" id="message" placeholder="e.g., Up to 80% Off Everything">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cta">Call-to-Action</label>
+                        <input type="text" id="cta" placeholder="e.g., Shop Now">
+                    </div>
+
+                    <div class="color-inputs">
+                        <div class="form-group">
+                            <label for="primary-color">Primary Color</label>
+                            <input type="color" id="primary-color" value="#3498db">
+                            <div class="color-preview" id="primary-preview" style="background-color: #3498db;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="secondary-color">Secondary Color</label>
+                            <input type="color" id="secondary-color" value="#2c3e50">
+                            <div class="color-preview" id="secondary-preview" style="background-color: #2c3e50;"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="font-family">Font Family</label>
+                        <select id="font-family">
+                            <option value="Arial">Arial</option>
+                            <option value="Helvetica">Helvetica</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="Verdana">Verdana</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="weather-enabled">
+                            <label for="weather-enabled">Include Weather Data</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="weather-location-group" style="display: none;">
+                        <label for="weather-location">Weather Location</label>
+                        <input type="text" id="weather-location" placeholder="e.g., London, UK">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="additional-instructions">Additional Instructions (Optional)</label>
+                        <textarea id="additional-instructions" placeholder="Any specific style or element requests..."></textarea>
+                    </div>
+
+                    <button class="btn btn-generate" onclick="generateBanner()">Generate Banner</button>
+                </div>
+
+                <!-- Video Tab -->
+                <div id="video-tab" class="tab-content">
+                    <h2>Create Promotional Video</h2>
+                    
+                    <div class="form-group">
+                        <label for="video-campaign-name">Campaign Name</label>
+                        <input type="text" id="video-campaign-name" placeholder="e.g., Product Launch">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="video-brand-name">Brand Name</label>
+                        <input type="text" id="video-brand-name" placeholder="e.g., AudioPro">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="video-type">Video Duration</label>
+                        <select id="video-type">
+                            <option value="short">Short (4 seconds)</option>
+                            <option value="standard">Standard (6 seconds)</option>
+                            <option value="extended">Extended (8 seconds)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="video-description">Video Description</label>
+                        <textarea id="video-description" placeholder="Describe what should happen in the video...&#10;e.g., Show headphones rotating slowly with dynamic lighting, cinematic camera movements"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="resolution">Resolution</label>
+                        <select id="resolution">
+                            <option value="720p">720p</option>
+                            <option value="1080p">1080p</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="aspect-ratio">Aspect Ratio</label>
+                        <select id="aspect-ratio">
+                            <option value="16:9">16:9 (Landscape)</option>
+                            <option value="9:16">9:16 (Portrait)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="video-model">AI Model</label>
+                        <select id="video-model">
+                            <option value="veo">Google Veo 3.1</option>
+                            <option value="runway">RunwayML Gen-3</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-generate" onclick="generateVideo()">Generate Video</button>
+                </div>
+            </div>
+
+            <div class="section output-section">
+                <h2>Output & Results</h2>
+                <div class="output-container">
+                    <div class="loading" id="loading">
+                        <div class="spinner"></div>
+                        <p>Generating content... This may take a few moments</p>
+                        <p><small>Banners: 10-30 seconds | Videos: 1-3 minutes</small></p>
+                    </div>
+                    
+                    <div class="result" id="result">
+                        <!-- Results will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        // Color preview updates
+        document.getElementById('primary-color').addEventListener('input', function(e) {
+            document.getElementById('primary-preview').style.backgroundColor = e.target.value;
+        });
+
+        document.getElementById('secondary-color').addEventListener('input', function(e) {
+            document.getElementById('secondary-preview').style.backgroundColor = e.target.value;
+        });
+
+        // Weather toggle
+        document.getElementById('weather-enabled').addEventListener('change', function(e) {
+            document.getElementById('weather-location-group').style.display = e.target.checked ? 'block' : 'none';
+        });
+
+        // Banner generation
+        async function generateBanner() {
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            result.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/generate/banner`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        campaign_name: document.getElementById('campaign-name').value,
+                        brand_name: document.getElementById('brand-name').value,
+                        banner_type: document.getElementById('banner-type').value,
+                        message: document.getElementById('message').value,
+                        cta: document.getElementById('cta').value,
+                        font_family: document.getElementById('font-family').value,
+                        primary_color: document.getElementById('primary-color').value,
+                        secondary_color: document.getElementById('secondary-color').value,
+                        additional_instructions: document.getElementById('additional-instructions').value,
+                        weather_enabled: document.getElementById('weather-enabled').checked,
+                        weather_location: document.getElementById('weather-location').value
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                loading.style.display = 'none';
+                result.style.display = 'block';
+
+                if (data.success) {
+                    result.innerHTML = `
+                        <div class="success">
+                            <h3>✅ Banner Generated Successfully!</h3>
+                            <div class="file-info">
+                                <p><strong>Filename:</strong> ${data.filename}</p>
+                                <p><strong>Size:</strong> ${data.metadata.file_size_mb} MB</p>
+                                <p><strong>Type:</strong> ${data.metadata.banner_type}</p>
+                            </div>
+                            <img src="${data.download_url}" class="preview" alt="Generated Banner">
+                            <div style="text-align: center; margin-top: 15px;">
+                                <a href="${data.download_url}" download class="btn">Download Banner</a>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="error">
+                            <h3>❌ Generation Failed</h3>
+                            <p>${data.detail || data.error || 'Unknown error occurred'}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                result.style.display = 'block';
+                result.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Connection Error</h3>
+                        <p>Could not connect to the server. Make sure the API is running on ${API_BASE}</p>
+                        <p><small>Error: ${error.message}</small></p>
+                    </div>
+                `;
+                console.error('Generation error:', error);
+            }
+        }
+
+        // Video generation
+        async function generateVideo() {
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            result.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/generate/video`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        campaign_name: document.getElementById('video-campaign-name').value,
+                        brand_name: document.getElementById('video-brand-name').value,
+                        video_type: document.getElementById('video-type').value,
+                        description: document.getElementById('video-description').value,
+                        resolution: document.getElementById('resolution').value,
+                        aspect_ratio: document.getElementById('aspect-ratio').value,
+                        model: document.getElementById('video-model').value
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                loading.style.display = 'none';
+                result.style.display = 'block';
+
+                if (data.success) {
+                    result.innerHTML = `
+                        <div class="success">
+                            <h3>✅ Video Generated Successfully!</h3>
+                            <div class="file-info">
+                                <p><strong>Filename:</strong> ${data.filename}</p>
+                                <p><strong>Duration:</strong> ${data.duration} seconds</p>
+                                <p><strong>Resolution:</strong> ${data.resolution_used || data.resolution}</p>
+                                <p><strong>Model:</strong> ${data.model}</p>
+                            </div>
+                            <video controls class="preview">
+                                <source src="${data.download_url}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            <div style="text-align: center; margin-top: 15px;">
+                                <a href="${data.download_url}" download class="btn">Download Video</a>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="error">
+                            <h3>❌ Generation Failed</h3>
+                            <p>${data.detail || data.error || 'Unknown error occurred'}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                result.style.display = 'block';
+                result.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Connection Error</h3>
+                        <p>Could not connect to the server. Make sure the API is running on ${API_BASE}</p>
+                        <p><small>Error: ${error.message}</small></p>
+                    </div>
+                `;
+                console.error('Generation error:', error);
+            }
+        }
+
+        // Pre-fill with example data for testing
+        function fillExampleData() {
+            document.getElementById('campaign-name').value = 'Summer Sale 2024';
+            document.getElementById('brand-name').value = 'FashionStore';
+            document.getElementById('message').value = 'Up to 60% Off Summer Collection';
+            document.getElementById('cta').value = 'Shop Now';
+        }
+
+        // Uncomment the line below to auto-fill example data for testing
+        // fillExampleData();
+    </script>
+</body>
+</html>

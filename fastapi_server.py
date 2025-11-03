@@ -4,9 +4,10 @@ FastAPI Server for Marketing Content Generation
 Provides REST API endpoints for banner and video generation
 """
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -48,17 +49,33 @@ def load_api_keys():
                 os.environ['OPENWEATHER_API_KEY'] = secrets['weather']['api_key']
                 print("✓ OPENWEATHER_API_KEY loaded from secrets")
             
-            # Also check MCP server env vars
-            if 'mcp' in secrets and 'servers' in secrets['mcp']:
-                if 'banner_tools' in secrets['mcp']['servers'] and 'env' in secrets['mcp']['servers']['banner_tools']:
-                    for key, val in secrets['mcp']['servers']['banner_tools']['env'].items():
-                        os.environ[key] = val
-                        print(f"✓ {key} loaded from MCP banner_tools")
+            # FIX: Check if mcp section exists and is not None
+            if secrets.get('mcp') is not None:
+                mcp_config = secrets['mcp']
                 
-                if 'video_tools' in secrets['mcp']['servers'] and 'env' in secrets['mcp']['servers']['video_tools']:
-                    for key, val in secrets['mcp']['servers']['video_tools']['env'].items():
-                        os.environ[key] = val
-                        print(f"✓ {key} loaded from MCP video_tools")
+                # FIX: Check if servers exists and is not None
+                if mcp_config.get('servers') is not None:
+                    servers = mcp_config['servers']
+                    
+                    # FIX: Check if banner_tools exists and is not None
+                    if servers.get('banner_tools') is not None:
+                        banner_config = servers['banner_tools']
+                        # FIX: Check if env exists and is not None
+                        if banner_config.get('env') is not None:
+                            for key, val in banner_config['env'].items():
+                                if val is not None:
+                                    os.environ[key] = str(val)
+                                    print(f"✓ {key} loaded from MCP banner_tools")
+                    
+                    # FIX: Check if video_tools exists and is not None
+                    if servers.get('video_tools') is not None:
+                        video_config = servers['video_tools']
+                        # FIX: Check if env exists and is not None
+                        if video_config.get('env') is not None:
+                            for key, val in video_config['env'].items():
+                                if val is not None:
+                                    os.environ[key] = str(val)
+                                    print(f"✓ {key} loaded from MCP video_tools")
         
         return True
     else:
@@ -89,6 +106,14 @@ app.add_middleware(
 OUTPUTS_DIR = os.path.join(os.path.dirname(__file__), "outputs")
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
+# Mount static files for serving the frontend
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(STATIC_DIR, exist_ok=True)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# Mount outputs directory for file downloads
+app.mount("/files", StaticFiles(directory=OUTPUTS_DIR), name="files")
+
 # Pydantic models for request validation
 class BannerRequest(BaseModel):
     campaign_name: str
@@ -110,7 +135,7 @@ class VideoRequest(BaseModel):
     description: str
     resolution: str = "1080p"
     aspect_ratio: str = "16:9"
-    model: str = "veo"  # veo or haiper
+    model: str = "veo"  # veo or runway
 
 class WeatherData(BaseModel):
     location: str
@@ -146,24 +171,63 @@ def fetch_weather(location: str) -> dict:
     except Exception as e:
         return {"error": f"Failed to fetch weather: {str(e)}"}
 
-# Root endpoint
-@app.get("/")
+# Favicon endpoint
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve the favicon"""
+    print("🔍 Favicon requested!")  # Add this line for debugging
+    favicon_path = os.path.join(STATIC_DIR, "favicon.ico")
+    if os.path.exists(favicon_path):
+        print(f"✅ Serving favicon from: {favicon_path}")  # Add this line
+        return FileResponse(favicon_path)
+    else:
+        print(f"❌ Favicon not found at: {favicon_path}")  # Add this line
+        # Return a 204 No Content if no favicon exists
+        return Response(status_code=204)
+
+# Root endpoint - serve HTML interface
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    """API root with documentation"""
-    return {
-        "message": "Marketing Content Generator API",
-        "version": "1.0.0",
-        "endpoints": {
-            "POST /generate/banner": "Generate a banner image",
-            "POST /generate/video": "Generate a video",
-            "POST /generate/banner-with-upload": "Generate banner with reference image",
-            "POST /generate/video-with-upload": "Generate video with input image",
-            "GET /weather/{location}": "Get weather data for a location",
-            "GET /outputs": "List all generated files",
-            "GET /outputs/{filename}": "Download a generated file"
-        },
-        "docs": "/docs"
-    }
+    """Serve the web interface"""
+    html_path = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(html_path):
+        with open(html_path, 'r', encoding='utf-8') as f:
+            return HTMLResponse(content=f.read())
+    else:
+        # Create a basic HTML page if none exists
+        basic_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Marketing Content Generator</title>
+            <link rel="icon" type="image/x-icon" href="/favicon.ico">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+                .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+                h1 { color: #2c3e50; text-align: center; }
+                .info { background: #e8f4fd; padding: 20px; border-radius: 10px; margin: 20px 0; }
+                .btn { display: inline-block; background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; margin: 10px 5px; }
+                .btn:hover { background: #2980b9; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🎨 Marketing Content Generator</h1>
+                <div class="info">
+                    <p><strong>Welcome to the Marketing Content Generator!</strong></p>
+                    <p>Place your <code>index.html</code> file in the <code>static</code> directory to see the web interface.</p>
+                    <p>In the meantime, you can use the API directly:</p>
+                </div>
+                <div style="text-align: center;">
+                    <a href="/docs" class="btn">API Documentation</a>
+                    <a href="/redoc" class="btn">Alternative Docs</a>
+                    <a href="/outputs" class="btn">View Outputs</a>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=basic_html)
 
 # Weather endpoint
 @app.get("/weather/{location}")
@@ -212,8 +276,8 @@ async def generate_banner_endpoint(request: BannerRequest):
             "success": True,
             "filename": result["filename"],
             "filepath": result["filepath"],
-            "download_url": f"/outputs/{result['filename']}",
-            "metadata": result.get("metadata", {})
+            "download_url": f"/files/{result['filename']}",
+            "metadata": result
         })
         
     except Exception as e:
@@ -280,10 +344,10 @@ async def generate_banner_with_upload(
             "success": True,
             "filename": result["filename"],
             "filepath": result["filepath"],
-            "download_url": f"/outputs/{result['filename']}",
+            "download_url": f"/files/{result['filename']}",
             "reference_used": bool(reference_image_path),
             "weather_applied": bool(weather_data),
-            "metadata": result.get("metadata", {})
+            "metadata": result
         })
         
     except Exception as e:
@@ -317,8 +381,8 @@ async def generate_video_endpoint(request: VideoRequest):
             "success": True,
             "filename": result["filename"],
             "filepath": result["filepath"],
-            "download_url": f"/outputs/{result['filename']}",
-            "metadata": result.get("metadata", {})
+            "download_url": f"/files/{result['filename']}",
+            "metadata": result
         })
         
     except Exception as e:
@@ -371,9 +435,9 @@ async def generate_video_with_upload(
             "success": True,
             "filename": result["filename"],
             "filepath": result["filepath"],
-            "download_url": f"/outputs/{result['filename']}",
+            "download_url": f"/files/{result['filename']}",
             "input_image_used": bool(input_image_path),
-            "metadata": result.get("metadata", {})
+            "metadata": result
         })
         
     except Exception as e:
@@ -387,36 +451,21 @@ async def list_outputs():
         files = []
         for filename in os.listdir(OUTPUTS_DIR):
             filepath = os.path.join(OUTPUTS_DIR, filename)
-            if os.path.isfile(filepath):
+            if os.path.isfile(filepath) and not filename.startswith('.'):
                 stat = os.stat(filepath)
                 files.append({
                     "filename": filename,
                     "size": stat.st_size,
                     "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
-                    "download_url": f"/outputs/{filename}"
+                    "download_url": f"/files/{filename}"
                 })
         
         return JSONResponse(content={
             "total": len(files),
-            "files": files
+            "files": sorted(files, key=lambda x: x['created'], reverse=True)
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-# Download output file
-@app.get("/outputs/{filename}")
-async def download_output(filename: str):
-    """Download a generated file"""
-    filepath = os.path.join(OUTPUTS_DIR, filename)
-    
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    return FileResponse(
-        filepath,
-        media_type="application/octet-stream",
-        filename=filename
-    )
 
 # Health check
 @app.get("/health")
@@ -436,8 +485,10 @@ if __name__ == "__main__":
     print("🚀 Marketing Content Generator API")
     print("=" * 60)
     print(f"📁 Outputs directory: {OUTPUTS_DIR}")
+    print(f"📁 Static directory: {STATIC_DIR}")
     print(f"🌐 Starting server on http://0.0.0.0:8000")
     print(f"📖 API Documentation: http://0.0.0.0:8000/docs")
+    print(f"🎨 Web Interface: http://0.0.0.0:8000")
     print(f"🔧 Alternative docs: http://0.0.0.0:8000/redoc")
     print("=" * 60)
     
