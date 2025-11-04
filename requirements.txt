@@ -4,6 +4,9 @@
 # Core Agent Framework
 fast-agent-mcp
 
+# MCP agent
+mcp-agent
+
 # AI APIs
 openai
 

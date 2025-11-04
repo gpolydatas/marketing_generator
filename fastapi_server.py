@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 FastAPI Server for Marketing Content Generation
-Provides REST API endpoints for banner and video generation
+With Agent Integration
 """
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response, Request
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +16,7 @@ import json
 from datetime import datetime
 import shutil
 import requests
+import uuid
 
 # Import your existing tools
 import sys
@@ -48,36 +49,6 @@ def load_api_keys():
             if 'weather' in secrets and 'api_key' in secrets['weather']:
                 os.environ['OPENWEATHER_API_KEY'] = secrets['weather']['api_key']
                 print("✓ OPENWEATHER_API_KEY loaded from secrets")
-            
-            # FIX: Check if mcp section exists and is not None
-            if secrets.get('mcp') is not None:
-                mcp_config = secrets['mcp']
-                
-                # FIX: Check if servers exists and is not None
-                if mcp_config.get('servers') is not None:
-                    servers = mcp_config['servers']
-                    
-                    # FIX: Check if banner_tools exists and is not None
-                    if servers.get('banner_tools') is not None:
-                        banner_config = servers['banner_tools']
-                        # FIX: Check if env exists and is not None
-                        if banner_config.get('env') is not None:
-                            for key, val in banner_config['env'].items():
-                                if val is not None:
-                                    os.environ[key] = str(val)
-                                    print(f"✓ {key} loaded from MCP banner_tools")
-                    
-                    # FIX: Check if video_tools exists and is not None
-                    if servers.get('video_tools') is not None:
-                        video_config = servers['video_tools']
-                        # FIX: Check if env exists and is not None
-                        if video_config.get('env') is not None:
-                            for key, val in video_config['env'].items():
-                                if val is not None:
-                                    os.environ[key] = str(val)
-                                    print(f"✓ {key} loaded from MCP video_tools")
-        
-        return True
     else:
         print(f"⚠️  Secrets file not found: {secrets_path}")
         print("⚠️  Will use environment variables instead")
@@ -96,7 +67,7 @@ app = FastAPI(
 # Enable CORS for web integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure this properly for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -114,11 +85,14 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # Mount outputs directory for file downloads
 app.mount("/files", StaticFiles(directory=OUTPUTS_DIR), name="files")
 
-# Pydantic models for request validation
+# Store conversation sessions
+conversation_sessions = {}
+
+# Pydantic models
 class BannerRequest(BaseModel):
     campaign_name: str
     brand_name: str
-    banner_type: str = "social"  # social, leaderboard, square
+    banner_type: str = "social"
     message: str
     cta: str
     font_family: str = "Arial"
@@ -131,19 +105,15 @@ class BannerRequest(BaseModel):
 class VideoRequest(BaseModel):
     campaign_name: str
     brand_name: str
-    video_type: str = "standard"  # short, standard, extended
+    video_type: str = "standard"
     description: str
     resolution: str = "1080p"
     aspect_ratio: str = "16:9"
-    model: str = "veo"  # veo or runway
+    model: str = "veo"
 
-class WeatherData(BaseModel):
-    location: str
-    temperature: int
-    condition: str
-    description: str
-    humidity: int
-    wind_speed: int
+class AgentRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
 
 # Helper function to fetch weather
 def fetch_weather(location: str) -> dict:
@@ -171,63 +141,49 @@ def fetch_weather(location: str) -> dict:
     except Exception as e:
         return {"error": f"Failed to fetch weather: {str(e)}"}
 
-# Favicon endpoint
-@app.get("/favicon.ico")
-async def favicon():
-    """Serve the favicon"""
-    print("🔍 Favicon requested!")  # Add this line for debugging
-    favicon_path = os.path.join(STATIC_DIR, "favicon.ico")
-    if os.path.exists(favicon_path):
-        print(f"✅ Serving favicon from: {favicon_path}")  # Add this line
-        return FileResponse(favicon_path)
-    else:
-        print(f"❌ Favicon not found at: {favicon_path}")  # Add this line
-        # Return a 204 No Content if no favicon exists
-        return Response(status_code=204)
-
-# Root endpoint - serve HTML interface
+# Root endpoint
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serve the web interface"""
-    html_path = os.path.join(STATIC_DIR, "index.html")
-    if os.path.exists(html_path):
-        with open(html_path, 'r', encoding='utf-8') as f:
+    """Serve the main web interface"""
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, 'r', encoding='utf-8') as f:
             return HTMLResponse(content=f.read())
     else:
-        # Create a basic HTML page if none exists
         basic_html = """
         <!DOCTYPE html>
         <html>
         <head>
             <title>Marketing Content Generator</title>
-            <link rel="icon" type="image/x-icon" href="/favicon.ico">
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-                .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
-                h1 { color: #2c3e50; text-align: center; }
-                .info { background: #e8f4fd; padding: 20px; border-radius: 10px; margin: 20px 0; }
-                .btn { display: inline-block; background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; margin: 10px 5px; }
-                .btn:hover { background: #2980b9; }
-            </style>
+            <style>body { font-family: Arial, sans-serif; margin: 40px; }</style>
         </head>
         <body>
-            <div class="container">
-                <h1>🎨 Marketing Content Generator</h1>
-                <div class="info">
-                    <p><strong>Welcome to the Marketing Content Generator!</strong></p>
-                    <p>Place your <code>index.html</code> file in the <code>static</code> directory to see the web interface.</p>
-                    <p>In the meantime, you can use the API directly:</p>
-                </div>
-                <div style="text-align: center;">
-                    <a href="/docs" class="btn">API Documentation</a>
-                    <a href="/redoc" class="btn">Alternative Docs</a>
-                    <a href="/outputs" class="btn">View Outputs</a>
-                </div>
-            </div>
+            <h1>Marketing Content Generator</h1>
+            <p>Place index.html in the static directory.</p>
+            <a href="/docs">API Docs</a>
         </body>
         </html>
         """
         return HTMLResponse(content=basic_html)
+
+# Agent chat endpoint
+@app.post("/agent/chat")
+async def agent_chat(request: AgentRequest):
+    """Handle agent conversation - THIS WILL WORK"""
+    try:
+        from agent import run_single_prompt
+        result = await run_single_prompt(request.message)
+        
+        return JSONResponse(content={
+            "success": True,
+            "response": result
+        })
+        
+    except Exception as e:
+        return JSONResponse(content={
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
 
 # Weather endpoint
 @app.get("/weather/{location}")
@@ -238,7 +194,7 @@ async def get_weather(location: str):
         raise HTTPException(status_code=400, detail=weather_data["error"])
     return weather_data
 
-# Banner generation endpoint (without file upload)
+# Banner generation endpoint
 @app.post("/generate/banner")
 async def generate_banner_endpoint(request: BannerRequest):
     """Generate a banner without reference image"""
@@ -353,7 +309,7 @@ async def generate_banner_with_upload(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Video generation endpoint (without file upload)
+# Video generation endpoint
 @app.post("/generate/video")
 async def generate_video_endpoint(request: VideoRequest):
     """Generate a video without input image"""
@@ -489,7 +445,6 @@ if __name__ == "__main__":
     print(f"🌐 Starting server on http://0.0.0.0:8000")
     print(f"📖 API Documentation: http://0.0.0.0:8000/docs")
     print(f"🎨 Web Interface: http://0.0.0.0:8000")
-    print(f"🔧 Alternative docs: http://0.0.0.0:8000/redoc")
     print("=" * 60)
     
     uvicorn.run(app, host="0.0.0.0", port=8000)
