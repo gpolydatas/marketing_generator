@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MARKETING CONTENT ORCHESTRATOR AGENT - FIXED PARAMETER HANDLING
+MARKETING CONTENT ORCHESTRATOR AGENT - FIXED PARAMETER UPDATING
 """
 
 import asyncio
@@ -9,6 +9,7 @@ import os
 import json
 import re
 from typing import Dict, List, Optional, Tuple
+from datetime import datetime
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -18,13 +19,14 @@ from banner_mcp_server import generate_banner, validate_banner
 from video_mcp_server import generate_video
 
 class MarketingOrchestrator:
-    """Marketing agent with fixed parameter handling"""
+    """Advanced marketing agent with proper parameter updating"""
     
     def __init__(self):
         self.conversation_state = {}
+        self.max_context_messages = 3
     
     async def process_request(self, user_input: str, session_id: str = "default") -> str:
-        """Process user requests with proper conversational flow"""
+        """Process user requests with proper parameter updating"""
         
         # Initialize or get session
         if session_id not in self.conversation_state:
@@ -32,12 +34,33 @@ class MarketingOrchestrator:
                 'step': 'start',
                 'content_type': None,
                 'params': {},
+                'context': [],
                 'attached_image': None,
                 'image_filename': None,
-                'image_path': None
+                'image_path': None,
+                'missing_param': None  # Track what we're currently asking for
             }
         
         session = self.conversation_state[session_id]
+        
+        # Add user message to context
+        session['context'].append({'role': 'user', 'content': user_input, 'timestamp': datetime.now()})
+        
+        # Keep only last N messages
+        if len(session['context']) > self.max_context_messages * 2:
+            session['context'] = session['context'][-self.max_context_messages * 2:]
+        
+        # Extract information from current and previous messages
+        extracted_params = self._extract_parameters_from_context(session['context'])
+        
+        # Update session parameters with extracted info
+        session['params'].update(extracted_params)
+        
+        # If we were asking for a specific parameter, store the user's response
+        if session.get('missing_param'):
+            param_name = session['missing_param']
+            session['params'][param_name] = user_input.strip()
+            session['missing_param'] = None
         
         # Extract attached image if present
         attached_image_path = self._extract_attached_image(user_input)
@@ -51,156 +74,189 @@ class MarketingOrchestrator:
             session['image_filename'] = image_filename
             session['image_path'] = image_path
             session['content_type'] = 'image_to_video'
-            session['step'] = 'ask_video_motion'
-            return f"✨ I'll animate {image_filename} for you! What kind of **camera motion** would you like? (e.g., 'slow zoom', 'pan left to right', 'dramatic lighting')"
+            session['step'] = 'generate_image_to_video'
         
-        # Handle based on current step
+        # Handle the current step
         if session['step'] == 'start':
-            return await self._handle_start_step(user_input, session)
-        
-        elif session['step'] == 'determine_content_type':
-            return await self._handle_content_type_step(user_input, session)
-        
-        elif session['step'] == 'ask_banner_brand':
-            return await self._handle_banner_brand_step(user_input, session)
-        
-        elif session['step'] == 'ask_banner_message':
-            return await self._handle_banner_message_step(user_input, session)
-        
-        elif session['step'] == 'ask_banner_cta':
-            return await self._handle_banner_cta_step(user_input, session)
-        
-        elif session['step'] == 'ask_banner_type':
-            # Parse the banner type and immediately generate
-            banner_type = self._parse_banner_type(user_input)
-            session['params']['banner_type'] = banner_type
-            session['params']['campaign'] = session['params'].get('campaign', 'Marketing Campaign')
-            return await self._generate_banner(session)
-        
-        elif session['step'] == 'ask_video_brand':
-            return await self._handle_video_brand_step(user_input, session)
-        
-        elif session['step'] == 'ask_video_description':
-            return await self._handle_video_description_step(user_input, session)
-        
-        elif session['step'] == 'ask_video_type':
-            # Parse the video type and immediately generate
-            video_type = self._parse_video_type(user_input)
-            session['params']['video_type'] = video_type
-            session['params']['campaign'] = session['params'].get('campaign', 'Video Campaign')
-            session['params']['resolution'] = '720p'
-            session['params']['aspect_ratio'] = '16:9'
-            session['params']['model'] = 'veo'
-            return await self._generate_video(session)
-        
-        elif session['step'] == 'ask_video_motion':
-            return await self._handle_video_motion_step(user_input, session)
-        
-        elif session['step'] == 'ask_image_usage':
-            return await self._handle_image_usage_step(user_input, session)
-        
+            response = await self._handle_start_step(session)
+            
+        elif session['step'] == 'clarify_intent':
+            response = await self._handle_clarify_intent(session)
+            
+        elif session['step'] == 'collect_banner_details':
+            response = await self._handle_collect_banner_details(session)
+            
+        elif session['step'] == 'collect_video_details':
+            response = await self._handle_collect_video_details(session)
+            
+        elif session['step'] == 'generate_banner':
+            response = await self._generate_banner(session)
+            
+        elif session['step'] == 'generate_video':
+            response = await self._generate_video(session)
+            
+        elif session['step'] == 'generate_image_to_video':
+            response = await self._generate_image_to_video(session)
+            
         else:
-            return "I'm not sure what to do next. Let's start over."
+            response = "I'm not sure what to do next. Let's start over."
+            session['step'] = 'start'
+        
+        # Add assistant response to context
+        session['context'].append({'role': 'assistant', 'content': response, 'timestamp': datetime.now()})
+        
+        return response
     
-    def _extract_attached_image(self, user_input: str) -> Optional[str]:
-        """Extract attached image path from user input"""
-        match = re.search(r'\[ATTACHED_IMAGE:\s*(.+?)\]', user_input)
-        return match.group(1) if match else None
-    
-    def _detect_image_filename(self, user_input: str) -> Tuple[Optional[str], Optional[str]]:
-        """Detect image filenames in user input for image-to-video"""
-        patterns = [
-            r'(\b\w+\.png\b)',
-            r'(\b\w+\.jpg\b)',
-            r'(\b\w+\.jpeg\b)',
-            r'(\bbanner_\w+\.png\b)'
+    def _extract_parameters_from_context(self, context: List[Dict]) -> Dict:
+        """Extract parameters from conversation context"""
+        all_text = " ".join([msg['content'] for msg in context if msg['role'] == 'user'])
+        
+        params = {}
+        
+        # Extract brand names
+        brand_patterns = [
+            r'(?:brand|company|business)[:\s]+([A-Za-z0-9\s&]+?)(?:\s|$|,|\.)',
+            r'(?:for|from)\s+([A-Za-z0-9\s&]+?)(?:\s|$|,|\.)',
         ]
         
-        for pattern in patterns:
-            match = re.search(pattern, user_input, re.IGNORECASE)
+        for pattern in brand_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
             if match:
-                filename = match.group(1)
-                filepath = os.path.join("outputs", filename)
-                return filename, filepath
+                params['brand'] = match.group(1).strip()
+                break
         
-        return None, None
+        # Extract campaign names
+        campaign_patterns = [
+            r'(?:campaign|promotion)[:\s]+([A-Za-z0-9\s]+?)(?:\s|$|,|\.)',
+            r'\b(black friday|christmas|holiday|summer|winter|spring|fall|new year)\b',
+        ]
+        
+        for pattern in campaign_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                params['campaign'] = match.group(1).strip().title()
+                break
+        
+        # Extract messages/offers
+        message_patterns = [
+            r'(\d+% off)',
+            r'(\d+% discount)',
+            r'(up to \d+% off)',
+            r'(free shipping)',
+        ]
+        
+        for pattern in message_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                params['message'] = match.group(1)
+                break
+        
+        # Extract CTAs
+        cta_patterns = [
+            r'\b(shop now|buy now|learn more|sign up|get started)\b'
+        ]
+        
+        for pattern in cta_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                params['cta'] = match.group(1).title()
+                break
+        
+        return params
     
-    async def _handle_start_step(self, user_input: str, session: Dict) -> str:
-        """Handle the initial step - determine what user wants"""
-        content_type = self._determine_content_type(user_input)
+    async def _handle_start_step(self, session: Dict) -> str:
+        """Handle the initial step"""
+        content_type = self._determine_content_type_from_context(session['context'])
         
-        if content_type == 'ambiguous':
-            session['step'] = 'determine_content_type'
-            return """I can help you create marketing content! What would you like?
-
-🎨 **Banner** - Static image for ads/social media
-🎬 **Video** - Motion content with camera movements
-✨ **Animate existing image** - Turn a banner into video
-
-Please tell me: "banner", "video", or "animate"?"""
-        
-        elif content_type == 'banner':
+        if content_type == 'banner':
             session['content_type'] = 'banner'
-            session['step'] = 'ask_banner_brand'
-            return "🎨 Great! I'll create a banner for you. First, what's your **brand name**? (Keep it short - 2-3 words work best!)"
-        
+            if self._has_sufficient_banner_params(session['params']):
+                session['step'] = 'generate_banner'
+                return await self._generate_banner(session)
+            else:
+                session['step'] = 'collect_banner_details'
+                return await self._handle_collect_banner_details(session)
+                
         elif content_type == 'video':
             session['content_type'] = 'video'
-            session['step'] = 'ask_video_brand'
-            return "🎬 Great! I'll create a video for you. First, what's your **brand name**?"
-        
+            if session['image_path']:  # Image-to-video
+                session['step'] = 'generate_image_to_video'
+                return await self._generate_image_to_video(session)
+            elif self._has_sufficient_video_params(session['params']):
+                session['step'] = 'generate_video'
+                return await self._generate_video(session)
+            else:
+                session['step'] = 'collect_video_details'
+                return await self._handle_collect_video_details(session)
+                
         elif content_type == 'image_to_video':
             session['content_type'] = 'image_to_video'
-            session['step'] = 'ask_video_motion'
-            return "✨ I see you want to animate an image! What kind of **camera motion** would you like? (e.g., 'slow zoom', 'pan left to right', 'dramatic lighting')"
+            session['step'] = 'generate_image_to_video'
+            return await self._generate_image_to_video(session)
+            
+        else:
+            session['step'] = 'clarify_intent'
+            return await self._handle_clarify_intent(session)
+    
+    async def _handle_clarify_intent(self, session: Dict) -> str:
+        """Ask user to clarify what they want to create"""
+        return """What would you like me to create for you?
+
+🎨 **Banner** - Static image for ads/social media
+🎬 **Video** - Motion content with camera movements  
+✨ **Animate existing image** - Turn a banner into video
+
+Please tell me which you'd like!"""
+    
+    async def _handle_collect_banner_details(self, session: Dict) -> str:
+        """Collect missing banner details"""
+        params = session['params']
+        
+        if not params.get('brand'):
+            session['missing_param'] = 'brand'
+            return "🎨 I'll create a banner for you! What's your **brand name**? (Keep it short - 2-3 words work best!)"
+        
+        elif not params.get('message'):
+            session['missing_param'] = 'message'
+            return f"✅ Brand: {params['brand']}\n\nWhat's the **main message** for your banner? (Keep it concise - under 8 words!)"
+        
+        elif not params.get('cta'):
+            session['missing_param'] = 'cta'
+            return f"✅ Great! Message: {params['message']}\n\nWhat **call-to-action** should I use? (Simple 1-3 words like 'Shop Now')"
         
         else:
-            return "I'm not sure what you'd like to create. Please specify 'banner', 'video', or 'animate'."
+            # We have all parameters, proceed to generation
+            session['step'] = 'generate_banner'
+            return await self._generate_banner(session)
     
-    async def _handle_content_type_step(self, user_input: str, session: Dict) -> str:
-        """Handle content type selection"""
-        user_input_lower = user_input.lower()
+    async def _handle_collect_video_details(self, session: Dict) -> str:
+        """Collect missing video details"""
+        params = session['params']
         
-        if any(word in user_input_lower for word in ['banner', 'image', 'static', 'poster']):
-            session['content_type'] = 'banner'
-            session['step'] = 'ask_banner_brand'
-            return "🎨 Great! I'll create a banner for you. First, what's your **brand name**? (Keep it short - 2-3 words work best!)"
+        if not params.get('brand'):
+            session['missing_param'] = 'brand'
+            return "🎬 I'll create a video for you! What's your **brand name**?"
         
-        elif any(word in user_input_lower for word in ['video', 'motion', 'animate', 'clip']):
-            session['content_type'] = 'video'
-            session['step'] = 'ask_video_brand'
-            return "🎬 Great! I'll create a video for you. First, what's your **brand name**?"
+        elif not params.get('description'):
+            session['missing_param'] = 'description'
+            return f"✅ Brand: {params['brand']}\n\nPlease **describe the video**. What should happen visually? (Camera movements, actions, lighting)"
         
         else:
-            return "I'm not sure what you'd like to create. Please choose: 'banner' or 'video'?"
-    
-    async def _handle_banner_brand_step(self, user_input: str, session: Dict) -> str:
-        """Handle brand name input for banner"""
-        session['params']['brand'] = user_input.strip()
-        session['step'] = 'ask_banner_message'
-        return f"✅ Brand: {user_input}\n\nNext, what's the **main message** for your banner? (Keep it concise - under 8 words!)"
-    
-    async def _handle_banner_message_step(self, user_input: str, session: Dict) -> str:
-        """Handle message input for banner"""
-        session['params']['message'] = user_input.strip()
-        session['step'] = 'ask_banner_cta'
-        return f"✅ Message: {user_input}\n\nNext, what **call-to-action** should I use? (Simple 1-3 words like 'Shop Now', 'Learn More')"
-    
-    async def _handle_banner_cta_step(self, user_input: str, session: Dict) -> str:
-        """Handle CTA input for banner"""
-        session['params']['cta'] = user_input.strip()
-        session['step'] = 'ask_banner_type'
-        return f"✅ CTA: {user_input}\n\nWhat **type of banner** would you like?\n• Social media (1200×628)\n• Leaderboard (728×90)  \n• Square (1024×1024)\n\nPlease tell me which type you prefer."
+            # We have all parameters, proceed to generation
+            session['step'] = 'generate_video'
+            return await self._generate_video(session)
     
     async def _generate_banner(self, session: Dict) -> str:
-        """Generate the banner and return result"""
+        """Generate banner with collected parameters"""
         try:
-            # Save parameters before resetting session
-            brand = session['params']['brand']
-            message = session['params']['message']
-            cta = session['params']['cta']
-            banner_type = session['params']['banner_type']
-            campaign = session['params']['campaign']
+            params = session['params']
+            
+            # Use collected parameters or defaults
+            campaign = params.get('campaign', 'Marketing Campaign')
+            brand = params.get('brand', 'Brand')
+            banner_type = params.get('banner_type', 'social')
+            message = params.get('message', 'Special Offer')
+            cta = params.get('cta', 'Learn More')
             
             result_json = await generate_banner(
                 campaign_name=campaign,
@@ -213,9 +269,7 @@ Please tell me: "banner", "video", or "animate"?"""
             result = json.loads(result_json)
             
             if "error" in result:
-                # Reset on error
                 session['step'] = 'start'
-                session['params'] = {}
                 return f"❌ Error creating banner: {result['error']}\n\nLet's try again. What would you like to create?"
             
             # Validate the banner
@@ -229,24 +283,25 @@ Please tell me: "banner", "video", or "animate"?"""
             
             validation = json.loads(validation_json)
             
-            # Reset session for next request
+            # Reset for next conversation
             session['step'] = 'start'
             session['params'] = {}
+            session['missing_param'] = None
             
             if validation.get('passed', False):
                 scores = validation.get('scores', {})
                 return f"""✅ Banner created successfully!
 
-📋 Your banner:
+📋 Details:
 • Brand: {brand}
-• Message: {message}
+• Message: {message} 
 • CTA: {cta}
-• Type: {banner_type} ({self._get_banner_dimensions(banner_type)})
+• Type: {banner_type}
 
 📊 Validation PASSED!
-• Brand visibility: {scores.get('brand_visibility', 0)}/10
-• Message clarity: {scores.get('message_clarity', 0)}/10
-• CTA effectiveness: {scores.get('cta_effectiveness', 0)}/10
+• Brand: {scores.get('brand_visibility', 0)}/10
+• Message: {scores.get('message_clarity', 0)}/10
+• CTA: {scores.get('cta_effectiveness', 0)}/10
 
 🎯 Your banner is ready: {result['filename']}
 📥 Download: /files/{result['filename']}
@@ -258,51 +313,37 @@ What would you like to create next?"""
 📁 File: {result['filename']}
 ❌ Issues: {', '.join(validation.get('issues', []))}
 
-💡 Try adjusting your message or CTA and create another banner!
-
 What would you like to create next?"""
                     
         except Exception as e:
             session['step'] = 'start'
-            session['params'] = {}
             return f"❌ Error: {str(e)}\n\nLet's try again. What would you like to create?"
     
-    async def _handle_video_brand_step(self, user_input: str, session: Dict) -> str:
-        """Handle brand name input for video"""
-        session['params']['brand'] = user_input.strip()
-        session['step'] = 'ask_video_description'
-        return f"✅ Brand: {user_input}\n\nNext, please **describe the video**. What should happen visually? (Camera movements, actions, lighting)"
-    
-    async def _handle_video_description_step(self, user_input: str, session: Dict) -> str:
-        """Handle description input for video"""
-        session['params']['description'] = user_input.strip()
-        session['step'] = 'ask_video_type'
-        return f"✅ Description: {user_input}\n\nWhat **duration** would you like?\n• Short (4 seconds)\n• Standard (6 seconds)\n• Extended (8 seconds)\n\nPlease tell me which duration you prefer."
-    
     async def _generate_video(self, session: Dict) -> str:
-        """Generate the video and return result"""
+        """Generate video with collected parameters"""
         try:
-            # Save parameters before resetting session
-            brand = session['params']['brand']
-            description = session['params']['description']
-            video_type = session['params']['video_type']
-            campaign = session['params']['campaign']
+            params = session['params']
+            
+            campaign = params.get('campaign', 'Video Campaign')
+            brand = params.get('brand', 'Brand')
+            video_type = params.get('video_type', 'standard')
+            description = params.get('description', 'Cinematic product showcase')
             
             result_json = await generate_video(
                 campaign_name=campaign,
                 brand_name=brand,
                 video_type=video_type,
                 description=description,
-                resolution=session['params']['resolution'],
-                aspect_ratio=session['params']['aspect_ratio'],
-                model=session['params']['model']
+                resolution='720p',
+                aspect_ratio='16:9',
+                model='veo'
             )
             
             result = json.loads(result_json)
             
-            # Reset session for next request
             session['step'] = 'start'
             session['params'] = {}
+            session['missing_param'] = None
             
             if "error" in result:
                 return f"❌ Error creating video: {result['error']}\n\nLet's try again. What would you like to create?"
@@ -310,7 +351,7 @@ What would you like to create next?"""
             duration = self._get_video_duration(video_type)
             return f"""✅ Video created successfully!
 
-📋 Your video:
+📋 Details:
 • Brand: {brand}
 • Duration: {duration} seconds
 • Description: {description}
@@ -323,46 +364,41 @@ What would you like to create next?"""
                 
         except Exception as e:
             session['step'] = 'start'
-            session['params'] = {}
             return f"❌ Error: {str(e)}\n\nLet's try again. What would you like to create?"
     
-    async def _handle_video_motion_step(self, user_input: str, session: Dict) -> str:
-        """Handle motion description for image-to-video and generate video"""
-        session['params']['description'] = user_input.strip()
-        session['params']['campaign'] = "Banner Animation"
-        session['params']['brand'] = "Brand"
-        session['params']['video_type'] = 'standard'
-        session['params']['resolution'] = '720p'
-        session['params']['aspect_ratio'] = '16:9'
-        session['params']['model'] = 'veo'
-        
-        # Generate the video
+    async def _generate_image_to_video(self, session: Dict) -> str:
+        """Generate video from existing image"""
         try:
+            if not session['image_path']:
+                return "I need an image to animate. Please specify a filename like 'banner_social_123.png'"
+            
+            description = session['params'].get('description', 'Cinematic slow zoom with dynamic lighting effects')
+            
             result_json = await generate_video(
-                campaign_name=session['params']['campaign'],
-                brand_name=session['params']['brand'],
-                video_type=session['params']['video_type'],
-                description=session['params']['description'],
-                resolution=session['params']['resolution'],
-                aspect_ratio=session['params']['aspect_ratio'],
+                campaign_name="Banner Animation",
+                brand_name="Brand",
+                video_type='standard',
+                description=description,
+                resolution='720p',
+                aspect_ratio='16:9',
                 input_image_path=session['image_path'],
-                model=session['params']['model']
+                model='veo'
             )
             
             result = json.loads(result_json)
             
-            # Reset session for next request
             session['step'] = 'start'
             session['params'] = {}
+            session['missing_param'] = None
             session['image_filename'] = None
             session['image_path'] = None
             
             if "error" in result:
                 return f"❌ Error creating video: {result['error']}\n\nLet's try again. What would you like to create?"
             
-            return f"""✅ Animated your banner into a video!
+            return f"""✅ Animated your image into a video!
 
-🎬 Motion: {session['params']['description']}
+🎬 Motion: {description}
 📁 Generated: {result['filename']}
 📥 Download: /files/{result['filename']}
 
@@ -370,42 +406,21 @@ What would you like to create next?"""
                 
         except Exception as e:
             session['step'] = 'start'
-            session['params'] = {}
             return f"❌ Error: {str(e)}\n\nLet's try again. What would you like to create?"
     
-    async def _handle_image_usage_step(self, user_input: str, session: Dict) -> str:
-        """Handle how to use attached image"""
-        user_input_lower = user_input.lower()
+    def _determine_content_type_from_context(self, context: List[Dict]) -> str:
+        """Determine content type from conversation context"""
+        all_text = " ".join([msg['content'] for msg in context if msg['role'] == 'user']).lower()
         
-        if 'banner' in user_input_lower:
-            session['content_type'] = 'banner'
-            session['step'] = 'ask_banner_brand'
-            return "🎨 Great! I'll use your image as style reference for a banner. First, what's your **brand name**?"
-        
-        elif 'video' in user_input_lower:
-            session['content_type'] = 'video'
-            session['step'] = 'ask_video_brand'
-            return "🎬 Great! I'll animate your image into a video. First, what's your **brand name**?"
-        
-        else:
-            return "Please tell me: use the image for a 'banner' or 'video'?"
-    
-    def _determine_content_type(self, user_input: str) -> str:
-        """Determine content type from user input"""
-        user_input_lower = user_input.lower()
-        
-        # Image-to-video triggers
-        image_to_video_triggers = ['animate', 'turn into video', 'make video from', 'video from', 'use banner']
-        if any(trigger in user_input_lower for trigger in image_to_video_triggers):
+        # Image-to-video has highest priority
+        if any(indicator in all_text for indicator in ['animate', 'turn into video', 'make video from', '.png', '.jpg']):
             return 'image_to_video'
         
-        # Banner triggers
-        banner_triggers = ['banner', 'image', 'poster', 'static', 'display ad', 'website banner']
-        banner_score = sum(1 for trigger in banner_triggers if trigger in user_input_lower)
+        # Banner indicators
+        banner_score = sum(1 for indicator in ['banner', 'image', 'poster', 'static'] if indicator in all_text)
         
-        # Video triggers  
-        video_triggers = ['video', 'clip', 'motion', 'animated', 'reel', 'tiktok']
-        video_score = sum(1 for trigger in video_triggers if trigger in user_input_lower)
+        # Video indicators
+        video_score = sum(1 for indicator in ['video', 'clip', 'motion', 'animated', 'camera'] if indicator in all_text)
         
         if banner_score > video_score:
             return 'banner'
@@ -414,87 +429,35 @@ What would you like to create next?"""
         else:
             return 'ambiguous'
     
-    def _parse_banner_type(self, user_input: str) -> str:
-        """Smart parsing of banner type from user input"""
-        user_input_lower = user_input.lower()
-        
-        # Social media banner patterns
-        social_patterns = [
-            'social', 'social media', 'facebook', 'instagram', 'twitter', 'linkedin',
-            '1200', '628', '1200×628', '1200x628', 'feed', 'post', 'timeline'
-        ]
-        
-        # Leaderboard banner patterns  
-        leaderboard_patterns = [
-            'leaderboard', 'banner', 'wide', '728', '90', '728×90', '728x90',
-            'header', 'top banner', 'website banner', 'ad banner', 'wide banner'
-        ]
-        
-        # Square banner patterns
-        square_patterns = [
-            'square', '1024', '1024×1024', '1024x1024', 'instagram story', 'profile',
-            '1:1', 'equal', 'profile picture', 'square post'
-        ]
-        
-        # Count matches for each type
-        social_score = sum(1 for pattern in social_patterns if pattern in user_input_lower)
-        leaderboard_score = sum(1 for pattern in leaderboard_patterns if pattern in user_input_lower) 
-        square_score = sum(1 for pattern in square_patterns if pattern in user_input_lower)
-        
-        # Return the type with highest score, default to social
-        if social_score > leaderboard_score and social_score > square_score:
-            return "social"
-        elif leaderboard_score > social_score and leaderboard_score > square_score:
-            return "leaderboard" 
-        elif square_score > social_score and square_score > leaderboard_score:
-            return "square"
-        else:
-            # Default to social if no clear winner
-            return "social"
+    def _has_sufficient_banner_params(self, params: Dict) -> bool:
+        """Check if we have enough parameters to generate a banner"""
+        return all(key in params and params[key] for key in ['brand', 'message', 'cta'])
     
-    def _parse_video_type(self, user_input: str) -> str:
-        """Smart parsing of video type from user input"""
-        user_input_lower = user_input.lower()
-        
-        # Short video patterns
-        short_patterns = [
-            'short', '4', '4s', '4 seconds', 'quick', 'brief', 'reel', 'tiktok',
-            'snack', 'bite-sized'
-        ]
-        
-        # Standard video patterns
-        standard_patterns = [
-            'standard', 'normal', 'regular', '6', '6s', '6 seconds', 'default',
-            'medium', 'average'
-        ]
-        
-        # Extended video patterns  
-        extended_patterns = [
-            'extended', 'long', '8', '8s', '8 seconds', 'full', 'detailed',
-            'comprehensive', 'lengthy'
-        ]
-        
-        # Count matches for each type
-        short_score = sum(1 for pattern in short_patterns if pattern in user_input_lower)
-        standard_score = sum(1 for pattern in standard_patterns if pattern in user_input_lower)
-        extended_score = sum(1 for pattern in extended_patterns if pattern in user_input_lower)
-        
-        # Return the type with highest score, default to standard
-        if short_score > standard_score and short_score > extended_score:
-            return "short"
-        elif extended_score > short_score and extended_score > standard_score:
-            return "extended"
-        else:
-            return "standard"
+    def _has_sufficient_video_params(self, params: Dict) -> bool:
+        """Check if we have enough parameters to generate a video"""
+        return 'brand' in params and params['brand'] and 'description' in params and params['description']
     
-    def _get_banner_dimensions(self, banner_type: str) -> str:
-        """Get dimensions for banner type"""
-        dimensions = {
-            "social": "1200×628 pixels",
-            "leaderboard": "728×90 pixels", 
-            "square": "1024×1024 pixels"
-        }
-        return dimensions.get(banner_type, "1200×628 pixels")
+    def _extract_attached_image(self, user_input: str) -> Optional[str]:
+        """Extract attached image path from user input"""
+        match = re.search(r'\[ATTACHED_IMAGE:\s*(.+?)\]', user_input)
+        return match.group(1) if match else None
+    
+    def _detect_image_filename(self, user_input: str) -> Tuple[Optional[str], Optional[str]]:
+        """Detect image filenames in user input for image-to-video"""
+        patterns = [
+            r'(\b\w+\.png\b)',
+            r'(\b\w+\.jpg\b)',
+            r'(\b\w+\.jpeg\b)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, user_input, re.IGNORECASE)
+            if match:
+                filename = match.group(1)
+                filepath = os.path.join("outputs", filename)
+                return filename, filepath
+        
+        return None, None
     
     def _get_video_duration(self, video_type: str) -> int:
         """Get duration in seconds for video type"""
@@ -511,10 +474,9 @@ async def run_single_prompt(prompt: str, session_id: str = "default") -> str:
 async def main():
     """Main interactive loop"""
     print("\n" + "="*80)
-    print("🎨 MARKETING CONTENT GENERATION SYSTEM")
+    print("🎨 MARKETING CONTENT GENERATOR")
     print("="*80)
-    print("🤖 Assistant: Hello! I'll guide you through creating marketing content.")
-    print("I'll ask one question at a time to make it easy!")
+    print("🤖 Assistant: Hello! Tell me what you'd like to create.")
     print("="*80)
     
     session_id = "cli_session"
