@@ -20,36 +20,67 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Load API keys from secrets file
 def load_api_keys():
-    """Load API keys from fastagent.secrets.yaml"""
+    """Load API keys from fastagent.secrets.yaml safely"""
     import yaml
     secrets_path = os.path.join(os.path.dirname(__file__), 'fastagent.secrets.yaml')
+    
     if os.path.exists(secrets_path):
-        with open(secrets_path, 'r') as f:
-            secrets = yaml.safe_load(f)
+        print(f"✓ Loading API keys from: {secrets_path}")
+        try:
+            with open(secrets_path, 'r') as f:
+                secrets = yaml.safe_load(f)
             
-            # Set environment variables
-            if 'openai' in secrets and 'api_key' in secrets['openai']:
-                os.environ['OPENAI_API_KEY'] = secrets['openai']['api_key']
-            
-            if 'anthropic' in secrets and 'api_key' in secrets['anthropic']:
-                os.environ['ANTHROPIC_API_KEY'] = secrets['anthropic']['api_key']
-            
-            if 'google' in secrets and 'api_key' in secrets['google']:
-                os.environ['GOOGLE_API_KEY'] = secrets['google']['api_key']
-            
-            if 'weather' in secrets and 'api_key' in secrets['weather']:
-                os.environ['OPENWEATHER_API_KEY'] = secrets['weather']['api_key']
-            
-            # Also check MCP server env vars
-            if 'mcp' in secrets and 'servers' in secrets['mcp']:
-                if 'banner_tools' in secrets['mcp']['servers'] and 'env' in secrets['mcp']['servers']['banner_tools']:
-                    for key, val in secrets['mcp']['servers']['banner_tools']['env'].items():
-                        os.environ[key] = val
+            # Set environment variables from root level keys
+            if secrets:
+                # OpenAI
+                if secrets.get('openai') and secrets['openai'].get('api_key'):
+                    os.environ['OPENAI_API_KEY'] = secrets['openai']['api_key']
+                    print("✓ OPENAI_API_KEY loaded from secrets")
                 
-                if 'video_tools' in secrets['mcp']['servers'] and 'env' in secrets['mcp']['servers']['video_tools']:
-                    for key, val in secrets['mcp']['servers']['video_tools']['env'].items():
-                        os.environ[key] = val
-
+                # Anthropic
+                if secrets.get('anthropic') and secrets['anthropic'].get('api_key'):
+                    os.environ['ANTHROPIC_API_KEY'] = secrets['anthropic']['api_key']
+                    print("✓ ANTHROPIC_API_KEY loaded from secrets")
+                
+                # Google
+                if secrets.get('google') and secrets['google'].get('api_key'):
+                    os.environ['GOOGLE_API_KEY'] = secrets['google']['api_key']
+                    print("✓ GOOGLE_API_KEY loaded from secrets")
+                
+                # Weather
+                if secrets.get('weather') and secrets['weather'].get('api_key'):
+                    os.environ['OPENWEATHER_API_KEY'] = secrets['weather']['api_key']
+                    print("✓ OPENWEATHER_API_KEY loaded from secrets")
+                
+                # MCP server env vars - SAFELY with existence checks
+                if secrets.get('mcp') and secrets['mcp'].get('servers'):
+                    mcp_servers = secrets['mcp']['servers']
+                    
+                    # Banner tools
+                    if mcp_servers.get('banner_tools') and mcp_servers['banner_tools'].get('env'):
+                        banner_env = mcp_servers['banner_tools']['env']
+                        for key, val in banner_env.items():
+                            if val and val != '<your-api-key-here>':  # Skip placeholder values
+                                os.environ[key] = val
+                                print(f"✓ {key} loaded from banner_tools")
+                    
+                    # Video tools
+                    if mcp_servers.get('video_tools') and mcp_servers['video_tools'].get('env'):
+                        video_env = mcp_servers['video_tools']['env']
+                        for key, val in video_env.items():
+                            if val and val != '<your-api-key-here>':  # Skip placeholder values
+                                os.environ[key] = val
+                                print(f"✓ {key} loaded from video_tools")
+            
+            print("✅ All API keys loaded successfully")
+            
+        except Exception as e:
+            print(f"❌ Error loading secrets: {e}")
+            print("⚠️  Will use environment variables instead")
+    else:
+        print(f"⚠️  Secrets file not found: {secrets_path}")
+        print("⚠️  Will use environment variables instead")
+        return False
 # Load keys on startup
 load_api_keys()
 
