@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Load API keys from secrets file
 def load_api_keys():
-    """Load API keys from fastagent.secrets.yaml safely"""
+    """Load API keys from secrets file safely"""
     import yaml
     secrets_path = os.path.join(os.path.dirname(__file__), 'fastagent.secrets.yaml')
     
@@ -665,22 +665,12 @@ def main():
                 user_prompt += f"\n\n[ATTACHED_IMAGE: {agent_image_path}]"
             
             try:
-                from agent import fast
+                from agent import run_single_prompt
                 
                 async def run_agent_with_conversation(prompt, history):
-                    async with fast.run() as agent:
-                        if history:
-                            context_messages = []
-                            for msg in history[-6:]:
-                                context_messages.append(f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}")
-                            
-                            full_context = "\n\n".join(context_messages)
-                            full_prompt = f"CONVERSATION HISTORY:\n{full_context}\n\nCURRENT USER MESSAGE:\n{prompt}"
-                        else:
-                            full_prompt = prompt
-                        
-                        response = await agent.marketing_orchestrator.send(full_prompt)
-                        return response
+                    # Use the agent's built-in conversation management
+                    response = await run_single_prompt(prompt)
+                    return response
                 
                 with st.spinner("🤖 Agent is thinking..."):
                     result = asyncio.run(run_agent_with_conversation(

@@ -80,12 +80,12 @@
 ### Installation (5 minutes)
 
 ```bash
-# 1. Install uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 2. Clone repository
-git clone https://github.com/gpolydatas/marketing_generator.git
+# 1. Clone repository
+git clone https://github.com/gpolydatas/marketing_generator
 cd marketing_generator
+
+# 2. Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 3. Install dependencies
 uv pip install -r requirements.txt
@@ -95,7 +95,7 @@ cp fastagent.secrets.yaml.template fastagent.secrets.yaml
 # Edit fastagent.secrets.yaml with your actual API keys
 
 # 5. Run application
-uv run streamlit run app_working.py
+./start.sh
 ```
 
 **Open in browser**: http://localhost:8501
@@ -109,22 +109,22 @@ uv run streamlit run app_working.py
 ```
 ┌─────────────────────────────────────────────────────────┐
 │              USER INTERFACE (Streamlit)                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │ Chat         │  │ Manual       │  │ Gallery      │ │
-│  │ Interface    │  │ Forms        │  │ View         │ │
-│  └──────────────┘  └──────────────┘  └──────────────┘ │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │ Chat         │  │ Manual       │  │ Gallery      │   │
+│  │ Interface    │  │ Forms        │  │ View         │   │
+│  └──────────────┘  └──────────────┘  └──────────────┘   │
 └──────────────────────────┬──────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────┐
 │         ORCHESTRATION LAYER (FastAgent)                 │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │      Marketing Orchestrator Agent                 │ │
-│  │  • Natural language understanding                 │ │
-│  │  • Context management (6 messages)                │ │
-│  │  • Intent detection & routing                     │ │
-│  │  • Parameter extraction                           │ │
-│  └───────────────────────────────────────────────────┘ │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │      Marketing Orchestrator Agent                 │  │
+│  │  • Natural language understanding                 │  │
+│  │  • Context management (6 messages)                │  │
+│  │  • Intent detection & routing                     │  │
+│  │  • Parameter extraction                           │  │
+│  └───────────────────────────────────────────────────┘  │
 └──────────────────────────┬──────────────────────────────┘
                            │
               ┌────────────┴────────────┐
@@ -135,15 +135,15 @@ uv run streamlit run app_working.py
 │  generate_banner()   │    │  generate_video()    │
 │  validate_banner()   │    │  validate_video()    │
 │                      │    │                      │
-│  ┌───────────────┐  │    │  ┌───────────────┐  │
-│  │  DALL-E 3     │  │    │  │  Veo 3.1      │  │
-│  │  (OpenAI)     │  │    │  │  (Google)     │  │
-│  └───────────────┘  │    │  └───────────────┘  │
+│  ┌───────────────┐   │    │  ┌───────────────┐   │
+│  │  DALL-E 3     │   │    │  │  Veo 3.1      │   │
+│  │  (OpenAI)     │   │    │  │  (Google)     │   │
+│  └───────────────┘   │    │  └───────────────┘   │
 │                      │    │                      │
-│  ┌───────────────┐  │    │  ┌───────────────┐  │
-│  │  Claude       │  │    │  │  Claude       │  │
-│  │  (Validation) │  │    │  │  (Validation) │  │
-│  └───────────────┘  │    │  └───────────────┘  │
+│  ┌───────────────┐   │    │  ┌───────────────┐   │
+│  │  Claude       │   │    │  │  Claude       │   │
+│  │  (Validation) │   │    │  │  (Validation) │   │
+│  └───────────────┘   │    │  └───────────────┘   │
 └──────────────────────┘    └──────────────────────┘
               │                         │
               └──────────┬──────────────┘

@@ -10,45 +10,13 @@ echo "🎨 Marketing Content Generator"
 echo "=========================================="
 echo ""
 
-# Function to check command existence
-command_exists() {
-    command -v "$1" &> /dev/null
-}
-
 # Function to setup the application
 setup_application() {
     echo "🔧 Setting up application..."
     
-    # Check if uv is installed
-    if ! command_exists uv; then
-        echo "📥 Installing uv..."
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "✅ uv installed"
-        
-        # Reload shell configuration to make uv available
-        if [ -f ~/.bashrc ]; then
-            source ~/.bashrc
-        elif [ -f ~/.zshrc ]; then
-            source ~/.zshrc
-        fi
-    else
-        echo "✅ uv is available"
-    fi
-
     # Check Python version
     python_version=$(python3 --version 2>&1 || echo "Python3 not found")
     echo "✓ Python: $python_version"
-
-    # Install dependencies
-    echo ""
-    echo "📦 Installing dependencies..."
-    if [ -f "requirements.txt" ]; then
-        uv pip install -r requirements.txt
-        echo "✅ Dependencies installed"
-    else
-        echo "❌ requirements.txt not found!"
-        exit 1
-    fi
 
     # Create necessary directories
     echo ""
@@ -105,72 +73,6 @@ EOF
 
     echo ""
     echo "✅ Setup complete!"
-}
-
-# Function to check dependencies
-check_dependencies() {
-    echo ""
-    echo "🔍 Checking dependencies..."
-
-    # Check Python packages
-    packages=("fastapi" "uvicorn" "streamlit" "openai" "anthropic" "google.genai")
-    missing_packages=()
-
-    for package in "${packages[@]}"; do
-        if python3 -c "import $package" 2>/dev/null; then
-            echo "✓ $package"
-        else
-            echo "✗ $package (missing)"
-            missing_packages+=("$package")
-        fi
-    done
-
-    if [ ${#missing_packages[@]} -gt 0 ]; then
-        echo ""
-        echo "❌ Missing dependencies detected!"
-        read -p "Install missing packages? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            uv pip install -r requirements.txt
-        else
-            echo "⚠️  Some features may not work without all dependencies"
-        fi
-    fi
-
-    # Check environment variables from secrets
-    echo ""
-    echo "🔑 Checking API keys..."
-
-    # Load secrets if file exists
-    if [ -f "fastagent.secrets.yaml" ]; then
-        # Simple check for API keys in secrets file
-        if grep -q "api_key" fastagent.secrets.yaml; then
-            echo "✓ API keys found in secrets file"
-        else
-            echo "⚠️  No API keys found in secrets file"
-        fi
-    else
-        echo "⚠️  No secrets file found"
-    fi
-
-    # Check environment variables
-    if [ -z "$OPENAI_API_KEY" ]; then
-        echo "⚠️  OPENAI_API_KEY not set in environment"
-    else
-        echo "✓ OPENAI_API_KEY (environment)"
-    fi
-
-    if [ -z "$ANTHROPIC_API_KEY" ]; then
-        echo "⚠️  ANTHROPIC_API_KEY not set in environment"
-    else
-        echo "✓ ANTHROPIC_API_KEY (environment)"
-    fi
-
-    if [ -z "$GOOGLE_API_KEY" ]; then
-        echo "⚠️  GOOGLE_API_KEY not set in environment"
-    else
-        echo "✓ GOOGLE_API_KEY (environment)"
-    fi
 }
 
 # Function to start the application
@@ -265,9 +167,6 @@ main() {
     else
         echo "✅ Application already set up"
     fi
-
-    # Check dependencies
-    check_dependencies
 
     # Start the application
     start_application
