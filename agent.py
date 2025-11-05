@@ -1,416 +1,499 @@
 #!/usr/bin/env python3
 """
-MARKETING CONTENT ORCHESTRATOR AGENT
-Master agent that routes to banner or video generation based on task
-NOW WITH IMAGE-TO-VIDEO SUPPORT!
+MARKETING CONTENT ORCHESTRATOR AGENT - FIXED PARAMETER UPDATING
 """
 
 import asyncio
-from mcp_agent.core.fastagent import FastAgent
+import sys
+import os
+import json
+import re
+from typing import Dict, List, Optional, Tuple
+from datetime import datetime
 
-# Create the application
-fast = FastAgent("Marketing Content Generation System")
+# Add current directory to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Import the MCP servers directly
+from banner_mcp_server import generate_banner, validate_banner
+from video_mcp_server import generate_video
 
-@fast.agent(
-    name="marketing_orchestrator",
-    instruction="""You are an intelligent marketing content orchestrator that creates both static banners and promotional videos.
-
-🚨 CRITICAL - IMAGE UPLOAD DETECTION:
-If the user's message contains "[ATTACHED_IMAGE: /path/to/image.png]", the user has uploaded a reference image!
-
-FOR BANNERS WITH ATTACHED IMAGE:
-- Extract the path from [ATTACHED_IMAGE: ...]
-- Use it as reference_image_path parameter in generate_banner
-- Tell user: "I'll use your uploaded image as style reference for the banner"
-
-FOR VIDEOS WITH ATTACHED IMAGE:
-- Extract the path from [ATTACHED_IMAGE: ...]
-- Use it as input_image_path parameter in generate_video (IMAGE-TO-VIDEO!)
-- Tell user: "I'll animate your uploaded image into a video"
-
-FOR PROMPTS WITH ATTACHED IMAGE:
-- Check the context: Is this for a banner or video request?
-- Banner context: "create a banner" → use as reference_image_path
-- Video context: "make a video" → use as input_image_path
-- Unclear: Ask "Would you like me to use this image as a style reference for a banner, or animate it into a video?"
-
-🚨 CRITICAL - IMAGE-TO-VIDEO DETECTION:
-When user mentions a .png or .jpg filename (like "banner_social_1792x1024_20251025_162452.png"), this is IMAGE-TO-VIDEO!
-
-IMMEDIATELY:
-1. Extract filename: "banner_social_1792x1024_20251025_162452.png"
-2. Construct path: "outputs/banner_social_1792x1024_20251025_162452.png"
-3. Call generate_video with:
-   - input_image_path="outputs/banner_social_1792x1024_20251025_162452.png"
-   - description="Cinematic slow zoom with dynamic lighting" (MOTION ONLY - NO FILENAME!)
-   - video_type="short" (or whatever user specified)
-   - resolution="720p"
-   - aspect_ratio="16:9"
-
-DO NOT put the filename in the description field!
-DO NOT forget to pass input_image_path parameter!
-
-AVAILABLE CAPABILITIES:
-1. BANNER GENERATION (DALL-E 3) - Static images
-   - Social media banners (1200×628)
-   - Leaderboard banners (728×90)
-   - Square posts (1024×1024)
-   - Fast generation (10-30 seconds)
-   
-2. VIDEO GENERATION (Veo 3.1) - Motion content
-   - Short videos (4 seconds)
-   - Standard videos (6 seconds)
-   - Extended videos (8 seconds)
-   - With native audio
-   - Generation time: 1-3 minutes
-   - **NEW: Can animate existing banner images into videos!**
-
-YOUR WORKFLOW:
-
-STEP 1: UNDERSTAND THE REQUEST
-- Determine if user wants a BANNER (static image) or VIDEO (motion content)
-- **NEW: Check if they want to animate an existing banner into a video**
-- **CRITICAL: Look for .png or .jpg filenames in the user's message - this means IMAGE-TO-VIDEO!**
-- If unclear, ask: "Would you like a static banner image or a video?"
-
-**DETECTING IMAGE-TO-VIDEO REQUESTS:**
-If the user's message contains a filename pattern (e.g., "banner_social_*.png" or "*.jpg"), this is IMAGE-TO-VIDEO!
-
-Trigger patterns:
-- "use banner [filename].png" → IMAGE-TO-VIDEO
-- "animate [filename].png" → IMAGE-TO-VIDEO  
-- "banner [filename].png to create video" → IMAGE-TO-VIDEO
-- "[filename].png to video" → IMAGE-TO-VIDEO
-- "from [filename].png" → IMAGE-TO-VIDEO
-
-When detected:
-1. Extract the filename from the message
-2. Use "outputs/[filename]" as input_image_path
-3. Ask user what MOTION they want (if not specified)
-4. Description should be ONLY about motion, NEVER include the filename
-
-STEP 2: ROUTE TO APPROPRIATE TOOLS
-- For BANNERS → Use generate_banner and validate_banner tools
-- For VIDEOS FROM SCRATCH → Use generate_video (without input_image_path)
-- **For VIDEOS FROM EXISTING BANNER → Use generate_video WITH input_image_path parameter**
-
-STEP 3: GATHER REQUIREMENTS
-Based on content type:
-
-FOR BANNERS:
-- Campaign name
-- Brand name (keep SHORT - 1-2 words work best)
-- Banner type: leaderboard/social/square
-- Message (keep CONCISE - under 8 words)
-- CTA (keep SIMPLE - 1-3 words like "Shop Now")
-
-FOR VIDEOS FROM SCRATCH:
-- Campaign name
-- Brand name
-- Video type: short/standard/extended
-- Description (VISUAL actions, camera movements, audio cues)
-- Resolution: 720p or 1080p
-- Aspect ratio: 16:9 or 9:16
-
-**FOR VIDEOS FROM EXISTING BANNER (IMAGE-TO-VIDEO):**
-- Get the FULL FILEPATH of the banner image
-- Video type: short/standard/extended
-- Description: Focus on MOTION (camera movements, zoom, pan, transitions, effects)
-- Resolution: 720p or 1080p
-- Aspect ratio: should match the banner (16:9 for leaderboard/social, 1:1 for square)
-- **CRITICAL: Pass the filepath in the input_image_path parameter**
-
-**HOW TO EXTRACT FILENAME FROM USER REQUEST:**
-When user says things like:
-- "use banner banner_social_1792x1024_20251025_162452.png to create a video"
-- "animate banner_social_1792x1024_20251025_162452.png"
-- "create video from banner_social_1792x1024_20251025_162452.png"
-
-STEP-BY-STEP:
-1. **EXTRACT** the filename from their message (e.g., "banner_social_1792x1024_20251025_162452.png")
-2. **CONSTRUCT** the full path: "outputs/banner_social_1792x1024_20251025_162452.png"
-3. **PASS** this path in the `input_image_path` parameter (NOT in description!)
-4. **WRITE** description with ONLY motion/camera work - NO filename mentioned!
-
-STEP 4: GENERATE CONTENT
-- Use appropriate generate_* tool
-- **For image-to-video: ALWAYS include input_image_path parameter with the full filepath**
-- Save the filepath from result
-
-STEP 5: VALIDATE
-- Use appropriate validate_* tool
-- Check if validation passed
-
-STEP 6: ITERATE IF NEEDED
-- If PASSED → Congratulate user, show scores, provide filepath
-- If FAILED → Regenerate with improvements from validation feedback
-- Maximum 3 attempts for banners, 2 for videos
-
-DECISION LOGIC:
-
-User says... → Create this:
-- "banner", "image", "poster", "ad image" → BANNER
-- "video", "clip", "motion", "animated" → VIDEO
-- **"animate this banner", "turn banner into video", "make banner move" → VIDEO FROM IMAGE**
-- **"use this banner for video", "video from banner" → VIDEO FROM IMAGE**
-- "social media post" → Ask which (could be either)
-- "story", "reel", "tiktok" → VIDEO
-- "display ad", "website banner" → BANNER
-- "product showcase with movement" → VIDEO
-- "static product image" → BANNER
-
-**IMAGE-TO-VIDEO WORKFLOW:**
-
-**IMMEDIATE DETECTION:** If user message contains a .png or .jpg filename, THIS IS IMAGE-TO-VIDEO!
-
-Example input: "use banner banner_social_1792x1024_20251025_162452.png to create a short video"
-
-**STEP-BY-STEP PROCESS:**
-
-1. **DETECT FILENAME in user's message:**
-   - Look for ANY .png or .jpg filename
-   - Extract it: "banner_social_1792x1024_20251025_162452.png"
-
-2. **CONSTRUCT FILE PATH:**
-   - Add "outputs/" prefix
-   - Result: "outputs/banner_social_1792x1024_20251025_162452.png"
-
-3. **EXTRACT OTHER PARAMETERS:**
-   - Duration: Look for "short"/"standard"/"extended" in message (default: "standard")
-   - Resolution: 720p (default)
-   - Aspect ratio: 16:9 (default)
-   - Campaign: "Banner Animation"
-   - Brand: "Brand"
-
-4. **DETERMINE MOTION DESCRIPTION:**
-   - If user specified motion (zoom, pan, etc.): Use it
-   - If NOT specified: Ask user "What camera motion would you like?"
-   - Default if needed: "Cinematic slow zoom into center with dynamic lighting"
-   - **CRITICAL: Description should ONLY be about motion, NEVER include the filename!**
-
-5. **SHOW CONFIRMATION TO USER (MANDATORY):**
-   ```
-   I detected an image-to-video request! Here's what I extracted:
-   
-   📋 Extracted Parameters:
-   - Filename: banner_social_1792x1024_20251025_162452.png
-   - File Path: outputs/banner_social_1792x1024_20251025_162452.png
-   - Duration: short (4 seconds)
-   - Motion: [user's description OR "default zoom and lighting"]
-   - Resolution: 720p
-   - Aspect: 16:9
-   
-   ⚠️ CRITICAL CHECK:
-   - input_image_path will be: outputs/banner_social_1792x1024_20251025_162452.png
-   - description will be: [motion only, NO filename]
-   
-   Proceed with generation? (or tell me what to adjust)
-   ```
-
-6. **CALL generate_video with:**
-   - input_image_path: "outputs/banner_social_1792x1024_20251025_162452.png"
-   - description: Motion ONLY (no filename!)
-   - All other parameters
-
-2. **Ask about desired motion:**
-   - "What kind of motion would you like?"
-   - Focus on: camera movements (zoom in/out, pan left/right, rotate)
-   - Visual effects (parallax, depth, transitions)
-   - Lighting changes
-   - Example: "Slow zoom into the product with a subtle rotation and spotlight effect"
-
-3. **Call generate_video WITH input_image_path:**
-   ```
-   generate_video(
-       campaign_name="Black Friday Animation",
-       brand_name="TechStore",
-       video_type="standard",
-       description="Slow zoom into the center with dramatic lighting sweep. Camera starts wide showing full banner, then smoothly zooms into the main product/text area. Dynamic lighting effects pulse and sweep across the scene. Professional cinematic motion.",
-       input_image_path="outputs/banner_social_1792x1024_20251025_162452.png",  # CRITICAL - ACTUAL FILE PATH!
-       resolution="720p",
-       aspect_ratio="16:9"
-   )
-   ```
-   
-   **CRITICAL RULES FOR THE DESCRIPTION FIELD:**
-   - Describe ONLY the motion/animation you want
-   - NEVER mention the filename in the description
-   - NEVER say "use the banner" or "animate the image" in description
-   - Focus on: camera movements, lighting effects, zoom, pan, transitions
-   - The image itself will be provided via input_image_path parameter
-
-4. **Validate and provide result**
-
-EXAMPLE INTERACTIONS:
-
-Example 1 - Banner Request:
-User: "Create a Black Friday sale banner"
-You: "I'll create a banner for you! Let me gather details:
-      - Brand name? (Keep it short - 2-3 words work best!)
-      - Banner type? (social: 1200×628, leaderboard: 728×90, square: 1024×1024)
-      - Main message? (Keep it concise - under 8 words!)
-      - Call-to-action? (Simple like 'Shop Now')"
-User: "Brand: TechStore, social banner, message: Up to 80% Off, CTA: Shop Now"
-You: "Perfect! These are nice and concise. Generating social media banner...
-      [calls generate_banner with banner_type='social']
-      ✅ Banner generated!
-      [calls validate_banner]
-      ✅ Validation PASSED! Scores: Brand: 9/10, Message: 8/10...
-      Your banner is ready: banner_social_1792x1024_20250124_143022.png"
-
-Example 2 - Video from Scratch:
-User: "Make a video for our new headphones"
-You: "I'll create a video for you! Let me gather details:
-      - Brand name?
-      - Video type? (short: 4s, standard: 6s, extended: 8s)
-      - Describe what should happen (visuals, camera, audio)?
-      - Resolution? (720p or 1080p)
-      - Aspect ratio? (16:9 landscape or 9:16 portrait)"
-User: "AudioPro, 6 seconds, show headphones rotating with cool lighting, 720p, 16:9"
-You: "Great! Let me enhance the description:
-      'Close-up of sleek black wireless headphones rotating slowly on white 
-      pedestal with dynamic studio lighting creating dramatic shadows. Modern 
-      minimalist aesthetic. Subtle electronic ambient music.'
-      
-      Does this work?"
-User: "Perfect!"
-You: "⏳ Generating 6-second video with Veo 3.1... (1-3 minutes)
-      [calls generate_video without input_image_path]
-      ✅ Video generated!
-      [calls validate_video]
-      ✅ Validation PASSED!
-      Your video is ready: video_standard_6s_text_20250124_143022.mp4"
-
-**Example 3 - Animate Existing Banner (NEW!):**
-User: "use banner banner_social_1792x1024_20251025_162452.png to create a short video"
-You: "I'll animate that banner! Let me extract the details:
-      - Filename detected: banner_social_1792x1024_20251025_162452.png
-      - Will construct path: outputs/banner_social_1792x1024_20251025_162452.png
-      - Duration: short (4 seconds)
-      
-      What kind of motion would you like? Some options:
-      - Slow zoom into center
-      - Pan across with parallax
-      - Dramatic lighting sweep
-      - Rotate and zoom"
-User: "Zoom in slowly with dramatic lighting"
-You: "Perfect! Generating now...
-      
-      [CRITICAL - calls generate_video with these EXACT parameters:
-       {
-         campaign_name: "Banner Animation",
-         brand_name: "Brand",
-         video_type: "short",
-         description: "Cinematic slow zoom from wide shot into center of frame. Camera movement is smooth and steady. Dynamic lighting effects sweep across the scene creating dramatic shadows and highlights.",
-         input_image_path: "outputs/banner_social_1792x1024_20251025_162452.png",  ← FILENAME EXTRACTED AND PASSED HERE!
-         resolution: "720p",
-         aspect_ratio: "16:9"
-       }
-       
-       NOTE: Description has ZERO mention of the filename! The filename is ONLY in input_image_path parameter!]
-      
-      ⏳ Generating 4-second video from your banner... (1-3 minutes)
-      ✅ Video generated!
-      Your animated banner video is ready!"
-
-Example 4 - Ambiguous Request:
-User: "I need marketing content for our summer sale"
-You: "I can help with that! Would you like:
-      1. A static banner image (DALL-E 3) - Fast, for display ads/social posts
-      2. A promotional video (Veo 3.1) - Motion content with audio
-      
-      Which would work better for your campaign?"
-
-Example 5 - Both Requested:
-User: "Can you create both a banner and video for our product launch?"
-You: "Absolutely! I can do that in two ways:
-      
-      Option 1: Create them separately
-      - Banner first (30 seconds)
-      - Then video from scratch (1-3 minutes)
-      
-      Option 2: Create banner, then animate it
-      - Banner first (30 seconds)
-      - Then turn it into a video with motion (1-3 minutes)
-      
-      Which approach do you prefer?"
-
-CRITICAL RULES FOR IMAGE-TO-VIDEO:
-- ✅ ALWAYS extract the filename from user's message (look for .png or .jpg files)
-- ✅ ALWAYS construct the path as: outputs/[filename] (e.g., outputs/banner_social_1792x1024_20251025_162452.png)
-- ✅ ALWAYS pass the constructed path in input_image_path parameter
-- ✅ Description should focus ONLY on MOTION and CAMERA WORK - NO filenames, NO "use image", NO "animate banner"
-- ✅ Description examples: "Slow cinematic zoom into center", "Camera pans left to right with parallax", "Dramatic lighting sweep"
-- ✅ If user says "banner X", extract X and use outputs/X as the path
-- ❌ NEVER put the filename or "use banner X" in the description text
-- ❌ NEVER say "animate this image" or similar in the description
-- ❌ NEVER forget the input_image_path parameter when user wants to animate a banner
-- ❌ NEVER pass the filename in description - it goes ONLY in input_image_path parameter
-
-FILENAME EXTRACTION EXAMPLES:
-- User says: "use banner banner_social_1792x1024_20251025_162452.png"
-  → Extract: "banner_social_1792x1024_20251025_162452.png"
-  → Path: "outputs/banner_social_1792x1024_20251025_162452.png"
-  
-- User says: "animate the black friday banner.png"  
-  → Extract: "black friday banner.png"
-  → Path: "outputs/black friday banner.png"
-  
-- User says: "create video from my_banner.png"
-  → Extract: "my_banner.png"  
-  → Path: "outputs/my_banner.png"
-
-GENERAL RULES:
-- ALWAYS ask clarifying questions if content type is unclear
-- ALWAYS validate immediately after generating
-- ALWAYS use exact filepath from generation tools
-- Be transparent about which tool you're using
-- Keep users informed about wait times
-- Track attempt numbers
-- Provide constructive feedback when regenerating
-
-Be professional, efficient, and always route to the right tools!
-""",
-    servers=["banner_tools", "video_tools"]  # Connect to BOTH MCP servers
-)
-async def main():
-    async with fast.run() as agent:
-        await agent.interactive()
-
-
-async def run_single_prompt(prompt: str):
-    """Run the agent with a single prompt (for UI integration)"""
-    async with fast.run() as agent:
-        # Send the prompt and get response
-        response = await agent.run_agent(prompt)
+class MarketingOrchestrator:
+    """Advanced marketing agent with proper parameter updating"""
+    
+    def __init__(self):
+        self.conversation_state = {}
+        self.max_context_messages = 3
+    
+    async def process_request(self, user_input: str, session_id: str = "default") -> str:
+        """Process user requests with proper parameter updating"""
+        
+        # Initialize or get session
+        if session_id not in self.conversation_state:
+            self.conversation_state[session_id] = {
+                'step': 'start',
+                'content_type': None,
+                'params': {},
+                'context': [],
+                'attached_image': None,
+                'image_filename': None,
+                'image_path': None,
+                'missing_param': None  # Track what we're currently asking for
+            }
+        
+        session = self.conversation_state[session_id]
+        
+        # Add user message to context
+        session['context'].append({'role': 'user', 'content': user_input, 'timestamp': datetime.now()})
+        
+        # Keep only last N messages
+        if len(session['context']) > self.max_context_messages * 2:
+            session['context'] = session['context'][-self.max_context_messages * 2:]
+        
+        # Extract information from current and previous messages
+        extracted_params = self._extract_parameters_from_context(session['context'])
+        
+        # Update session parameters with extracted info
+        session['params'].update(extracted_params)
+        
+        # If we were asking for a specific parameter, store the user's response
+        if session.get('missing_param'):
+            param_name = session['missing_param']
+            session['params'][param_name] = user_input.strip()
+            session['missing_param'] = None
+        
+        # Extract attached image if present
+        attached_image_path = self._extract_attached_image(user_input)
+        if attached_image_path:
+            session['attached_image'] = attached_image_path
+            user_input = user_input.replace(f"[ATTACHED_IMAGE: {attached_image_path}]", "").strip()
+        
+        # Check for image-to-video requests
+        image_filename, image_path = self._detect_image_filename(user_input)
+        if image_filename:
+            session['image_filename'] = image_filename
+            session['image_path'] = image_path
+            session['content_type'] = 'image_to_video'
+            session['step'] = 'generate_image_to_video'
+        
+        # Handle the current step
+        if session['step'] == 'start':
+            response = await self._handle_start_step(session)
+            
+        elif session['step'] == 'clarify_intent':
+            response = await self._handle_clarify_intent(session)
+            
+        elif session['step'] == 'collect_banner_details':
+            response = await self._handle_collect_banner_details(session)
+            
+        elif session['step'] == 'collect_video_details':
+            response = await self._handle_collect_video_details(session)
+            
+        elif session['step'] == 'generate_banner':
+            response = await self._generate_banner(session)
+            
+        elif session['step'] == 'generate_video':
+            response = await self._generate_video(session)
+            
+        elif session['step'] == 'generate_image_to_video':
+            response = await self._generate_image_to_video(session)
+            
+        else:
+            response = "I'm not sure what to do next. Let's start over."
+            session['step'] = 'start'
+        
+        # Add assistant response to context
+        session['context'].append({'role': 'assistant', 'content': response, 'timestamp': datetime.now()})
+        
         return response
+    
+    def _extract_parameters_from_context(self, context: List[Dict]) -> Dict:
+        """Extract parameters from conversation context"""
+        all_text = " ".join([msg['content'] for msg in context if msg['role'] == 'user'])
+        
+        params = {}
+        
+        # Extract brand names
+        brand_patterns = [
+            r'(?:brand|company|business)[:\s]+([A-Za-z0-9\s&]+?)(?:\s|$|,|\.)',
+            r'(?:for|from)\s+([A-Za-z0-9\s&]+?)(?:\s|$|,|\.)',
+        ]
+        
+        for pattern in brand_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                params['brand'] = match.group(1).strip()
+                break
+        
+        # Extract campaign names
+        campaign_patterns = [
+            r'(?:campaign|promotion)[:\s]+([A-Za-z0-9\s]+?)(?:\s|$|,|\.)',
+            r'\b(black friday|christmas|holiday|summer|winter|spring|fall|new year)\b',
+        ]
+        
+        for pattern in campaign_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                params['campaign'] = match.group(1).strip().title()
+                break
+        
+        # Extract messages/offers
+        message_patterns = [
+            r'(\d+% off)',
+            r'(\d+% discount)',
+            r'(up to \d+% off)',
+            r'(free shipping)',
+        ]
+        
+        for pattern in message_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                params['message'] = match.group(1)
+                break
+        
+        # Extract CTAs
+        cta_patterns = [
+            r'\b(shop now|buy now|learn more|sign up|get started)\b'
+        ]
+        
+        for pattern in cta_patterns:
+            match = re.search(pattern, all_text, re.IGNORECASE)
+            if match:
+                params['cta'] = match.group(1).title()
+                break
+        
+        return params
+    
+    async def _handle_start_step(self, session: Dict) -> str:
+        """Handle the initial step"""
+        content_type = self._determine_content_type_from_context(session['context'])
+        
+        if content_type == 'banner':
+            session['content_type'] = 'banner'
+            if self._has_sufficient_banner_params(session['params']):
+                session['step'] = 'generate_banner'
+                return await self._generate_banner(session)
+            else:
+                session['step'] = 'collect_banner_details'
+                return await self._handle_collect_banner_details(session)
+                
+        elif content_type == 'video':
+            session['content_type'] = 'video'
+            if session['image_path']:  # Image-to-video
+                session['step'] = 'generate_image_to_video'
+                return await self._generate_image_to_video(session)
+            elif self._has_sufficient_video_params(session['params']):
+                session['step'] = 'generate_video'
+                return await self._generate_video(session)
+            else:
+                session['step'] = 'collect_video_details'
+                return await self._handle_collect_video_details(session)
+                
+        elif content_type == 'image_to_video':
+            session['content_type'] = 'image_to_video'
+            session['step'] = 'generate_image_to_video'
+            return await self._generate_image_to_video(session)
+            
+        else:
+            session['step'] = 'clarify_intent'
+            return await self._handle_clarify_intent(session)
+    
+    async def _handle_clarify_intent(self, session: Dict) -> str:
+        """Ask user to clarify what they want to create"""
+        return """What would you like me to create for you?
 
+🎨 **Banner** - Static image for ads/social media
+🎬 **Video** - Motion content with camera movements  
+✨ **Animate existing image** - Turn a banner into video
+
+Please tell me which you'd like!"""
+    
+    async def _handle_collect_banner_details(self, session: Dict) -> str:
+        """Collect missing banner details"""
+        params = session['params']
+        
+        if not params.get('brand'):
+            session['missing_param'] = 'brand'
+            return "🎨 I'll create a banner for you! What's your **brand name**? (Keep it short - 2-3 words work best!)"
+        
+        elif not params.get('message'):
+            session['missing_param'] = 'message'
+            return f"✅ Brand: {params['brand']}\n\nWhat's the **main message** for your banner? (Keep it concise - under 8 words!)"
+        
+        elif not params.get('cta'):
+            session['missing_param'] = 'cta'
+            return f"✅ Great! Message: {params['message']}\n\nWhat **call-to-action** should I use? (Simple 1-3 words like 'Shop Now')"
+        
+        else:
+            # We have all parameters, proceed to generation
+            session['step'] = 'generate_banner'
+            return await self._generate_banner(session)
+    
+    async def _handle_collect_video_details(self, session: Dict) -> str:
+        """Collect missing video details"""
+        params = session['params']
+        
+        if not params.get('brand'):
+            session['missing_param'] = 'brand'
+            return "🎬 I'll create a video for you! What's your **brand name**?"
+        
+        elif not params.get('description'):
+            session['missing_param'] = 'description'
+            return f"✅ Brand: {params['brand']}\n\nPlease **describe the video**. What should happen visually? (Camera movements, actions, lighting)"
+        
+        else:
+            # We have all parameters, proceed to generation
+            session['step'] = 'generate_video'
+            return await self._generate_video(session)
+    
+    async def _generate_banner(self, session: Dict) -> str:
+        """Generate banner with collected parameters"""
+        try:
+            params = session['params']
+            
+            # Use collected parameters or defaults
+            campaign = params.get('campaign', 'Marketing Campaign')
+            brand = params.get('brand', 'Brand')
+            banner_type = params.get('banner_type', 'social')
+            message = params.get('message', 'Special Offer')
+            cta = params.get('cta', 'Learn More')
+            
+            result_json = await generate_banner(
+                campaign_name=campaign,
+                brand_name=brand,
+                banner_type=banner_type,
+                message=message,
+                cta=cta
+            )
+            
+            result = json.loads(result_json)
+            
+            if "error" in result:
+                session['step'] = 'start'
+                return f"❌ Error creating banner: {result['error']}\n\nLet's try again. What would you like to create?"
+            
+            # Validate the banner
+            validation_json = await validate_banner(
+                filepath=result['filepath'],
+                campaign_name=campaign,
+                brand_name=brand,
+                message=message,
+                cta=cta
+            )
+            
+            validation = json.loads(validation_json)
+            
+            # Reset for next conversation
+            session['step'] = 'start'
+            session['params'] = {}
+            session['missing_param'] = None
+            
+            if validation.get('passed', False):
+                scores = validation.get('scores', {})
+                return f"""✅ Banner created successfully!
+
+📋 Details:
+• Brand: {brand}
+• Message: {message} 
+• CTA: {cta}
+• Type: {banner_type}
+
+📊 Validation PASSED!
+• Brand: {scores.get('brand_visibility', 0)}/10
+• Message: {scores.get('message_clarity', 0)}/10
+• CTA: {scores.get('cta_effectiveness', 0)}/10
+
+🎯 Your banner is ready: {result['filename']}
+📥 Download: /files/{result['filename']}
+
+What would you like to create next?"""
+            else:
+                return f"""⚠️ Banner created but needs improvement
+
+📁 File: {result['filename']}
+❌ Issues: {', '.join(validation.get('issues', []))}
+
+What would you like to create next?"""
+                    
+        except Exception as e:
+            session['step'] = 'start'
+            return f"❌ Error: {str(e)}\n\nLet's try again. What would you like to create?"
+    
+    async def _generate_video(self, session: Dict) -> str:
+        """Generate video with collected parameters"""
+        try:
+            params = session['params']
+            
+            campaign = params.get('campaign', 'Video Campaign')
+            brand = params.get('brand', 'Brand')
+            video_type = params.get('video_type', 'standard')
+            description = params.get('description', 'Cinematic product showcase')
+            
+            result_json = await generate_video(
+                campaign_name=campaign,
+                brand_name=brand,
+                video_type=video_type,
+                description=description,
+                resolution='720p',
+                aspect_ratio='16:9',
+                model='veo'
+            )
+            
+            result = json.loads(result_json)
+            
+            session['step'] = 'start'
+            session['params'] = {}
+            session['missing_param'] = None
+            
+            if "error" in result:
+                return f"❌ Error creating video: {result['error']}\n\nLet's try again. What would you like to create?"
+            
+            duration = self._get_video_duration(video_type)
+            return f"""✅ Video created successfully!
+
+📋 Details:
+• Brand: {brand}
+• Duration: {duration} seconds
+• Description: {description}
+
+⏳ Generation complete!
+🎯 Your video is ready: {result['filename']}
+📥 Download: /files/{result['filename']}
+
+What would you like to create next?"""
+                
+        except Exception as e:
+            session['step'] = 'start'
+            return f"❌ Error: {str(e)}\n\nLet's try again. What would you like to create?"
+    
+    async def _generate_image_to_video(self, session: Dict) -> str:
+        """Generate video from existing image"""
+        try:
+            if not session['image_path']:
+                return "I need an image to animate. Please specify a filename like 'banner_social_123.png'"
+            
+            description = session['params'].get('description', 'Cinematic slow zoom with dynamic lighting effects')
+            
+            result_json = await generate_video(
+                campaign_name="Banner Animation",
+                brand_name="Brand",
+                video_type='standard',
+                description=description,
+                resolution='720p',
+                aspect_ratio='16:9',
+                input_image_path=session['image_path'],
+                model='veo'
+            )
+            
+            result = json.loads(result_json)
+            
+            session['step'] = 'start'
+            session['params'] = {}
+            session['missing_param'] = None
+            session['image_filename'] = None
+            session['image_path'] = None
+            
+            if "error" in result:
+                return f"❌ Error creating video: {result['error']}\n\nLet's try again. What would you like to create?"
+            
+            return f"""✅ Animated your image into a video!
+
+🎬 Motion: {description}
+📁 Generated: {result['filename']}
+📥 Download: /files/{result['filename']}
+
+What would you like to create next?"""
+                
+        except Exception as e:
+            session['step'] = 'start'
+            return f"❌ Error: {str(e)}\n\nLet's try again. What would you like to create?"
+    
+    def _determine_content_type_from_context(self, context: List[Dict]) -> str:
+        """Determine content type from conversation context"""
+        all_text = " ".join([msg['content'] for msg in context if msg['role'] == 'user']).lower()
+        
+        # Image-to-video has highest priority
+        if any(indicator in all_text for indicator in ['animate', 'turn into video', 'make video from', '.png', '.jpg']):
+            return 'image_to_video'
+        
+        # Banner indicators
+        banner_score = sum(1 for indicator in ['banner', 'image', 'poster', 'static'] if indicator in all_text)
+        
+        # Video indicators
+        video_score = sum(1 for indicator in ['video', 'clip', 'motion', 'animated', 'camera'] if indicator in all_text)
+        
+        if banner_score > video_score:
+            return 'banner'
+        elif video_score > banner_score:
+            return 'video'
+        else:
+            return 'ambiguous'
+    
+    def _has_sufficient_banner_params(self, params: Dict) -> bool:
+        """Check if we have enough parameters to generate a banner"""
+        return all(key in params and params[key] for key in ['brand', 'message', 'cta'])
+    
+    def _has_sufficient_video_params(self, params: Dict) -> bool:
+        """Check if we have enough parameters to generate a video"""
+        return 'brand' in params and params['brand'] and 'description' in params and params['description']
+    
+    def _extract_attached_image(self, user_input: str) -> Optional[str]:
+        """Extract attached image path from user input"""
+        match = re.search(r'\[ATTACHED_IMAGE:\s*(.+?)\]', user_input)
+        return match.group(1) if match else None
+    
+    def _detect_image_filename(self, user_input: str) -> Tuple[Optional[str], Optional[str]]:
+        """Detect image filenames in user input for image-to-video"""
+        patterns = [
+            r'(\b\w+\.png\b)',
+            r'(\b\w+\.jpg\b)',
+            r'(\b\w+\.jpeg\b)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, user_input, re.IGNORECASE)
+            if match:
+                filename = match.group(1)
+                filepath = os.path.join("outputs", filename)
+                return filename, filepath
+        
+        return None, None
+    
+    def _get_video_duration(self, video_type: str) -> int:
+        """Get duration in seconds for video type"""
+        durations = {"short": 4, "standard": 6, "extended": 8}
+        return durations.get(video_type, 6)
+
+# Create the orchestrator instance
+orchestrator = MarketingOrchestrator()
+
+async def run_single_prompt(prompt: str, session_id: str = "default") -> str:
+    """Run the agent with a single prompt"""
+    return await orchestrator.process_request(prompt, session_id)
+
+async def main():
+    """Main interactive loop"""
+    print("\n" + "="*80)
+    print("🎨 MARKETING CONTENT GENERATOR")
+    print("="*80)
+    print("🤖 Assistant: Hello! Tell me what you'd like to create.")
+    print("="*80)
+    
+    session_id = "cli_session"
+    
+    while True:
+        try:
+            user_input = input("\n💬 You: ").strip()
+            if user_input.lower() in ['quit', 'exit', 'bye']:
+                break
+                
+            response = await run_single_prompt(user_input, session_id)
+            print(f"\n🤖 Assistant: {response}")
+            
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
 
 if __name__ == "__main__":
-    print("\n" + "="*80)
-    print("🎨 MARKETING CONTENT GENERATION SYSTEM")
-    print("="*80)
-    print("\nThis system can create:")
-    print("  📱 BANNERS - Static images with DALL-E 3")
-    print("     • Social media posts (1200×628)")
-    print("     • Display ads (728×90)")
-    print("     • Square posts (1024×1024)")
-    print("     • Generation time: 10-30 seconds")
-    print()
-    print("  🎬 VIDEOS - Motion content with Veo 3.1")
-    print("     • Short (4s), Standard (6s), Extended (8s)")
-    print("     • Native audio generation")
-    print("     • 720p or 1080p quality")
-    print("     • Generation time: 1-3 minutes")
-    print()
-    print("  ✨ NEW: ANIMATE BANNERS INTO VIDEOS!")
-    print("     • Turn existing banners into motion content")
-    print("     • Add camera movements, zoom, lighting effects")
-    print("     • Keep all branding and text intact")
-    print()
-    print("Both are automatically validated for quality!")
-    print("="*80)
-    print()
-    
     asyncio.run(main())

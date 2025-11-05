@@ -8,7 +8,7 @@ import streamlit as st
 import os
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import sys
 import nest_asyncio
 
@@ -20,33 +20,67 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Load API keys from secrets file
 def load_api_keys():
-    """Load API keys from fastagent.secrets.yaml"""
+    """Load API keys from secrets file safely"""
     import yaml
     secrets_path = os.path.join(os.path.dirname(__file__), 'fastagent.secrets.yaml')
+    
     if os.path.exists(secrets_path):
-        with open(secrets_path, 'r') as f:
-            secrets = yaml.safe_load(f)
+        print(f"✓ Loading API keys from: {secrets_path}")
+        try:
+            with open(secrets_path, 'r') as f:
+                secrets = yaml.safe_load(f)
             
-            # Set environment variables
-            if 'openai' in secrets and 'api_key' in secrets['openai']:
-                os.environ['OPENAI_API_KEY'] = secrets['openai']['api_key']
-            
-            if 'anthropic' in secrets and 'api_key' in secrets['anthropic']:
-                os.environ['ANTHROPIC_API_KEY'] = secrets['anthropic']['api_key']
-            
-            if 'google' in secrets and 'api_key' in secrets['google']:
-                os.environ['GOOGLE_API_KEY'] = secrets['google']['api_key']
-            
-            # Also check MCP server env vars
-            if 'mcp' in secrets and 'servers' in secrets['mcp']:
-                if 'banner_tools' in secrets['mcp']['servers'] and 'env' in secrets['mcp']['servers']['banner_tools']:
-                    for key, val in secrets['mcp']['servers']['banner_tools']['env'].items():
-                        os.environ[key] = val
+            # Set environment variables from root level keys
+            if secrets:
+                # OpenAI
+                if secrets.get('openai') and secrets['openai'].get('api_key'):
+                    os.environ['OPENAI_API_KEY'] = secrets['openai']['api_key']
+                    print("✓ OPENAI_API_KEY loaded from secrets")
                 
-                if 'video_tools' in secrets['mcp']['servers'] and 'env' in secrets['mcp']['servers']['video_tools']:
-                    for key, val in secrets['mcp']['servers']['video_tools']['env'].items():
-                        os.environ[key] = val
-
+                # Anthropic
+                if secrets.get('anthropic') and secrets['anthropic'].get('api_key'):
+                    os.environ['ANTHROPIC_API_KEY'] = secrets['anthropic']['api_key']
+                    print("✓ ANTHROPIC_API_KEY loaded from secrets")
+                
+                # Google
+                if secrets.get('google') and secrets['google'].get('api_key'):
+                    os.environ['GOOGLE_API_KEY'] = secrets['google']['api_key']
+                    print("✓ GOOGLE_API_KEY loaded from secrets")
+                
+                # Weather
+                if secrets.get('weather') and secrets['weather'].get('api_key'):
+                    os.environ['OPENWEATHER_API_KEY'] = secrets['weather']['api_key']
+                    print("✓ OPENWEATHER_API_KEY loaded from secrets")
+                
+                # MCP server env vars - SAFELY with existence checks
+                if secrets.get('mcp') and secrets['mcp'].get('servers'):
+                    mcp_servers = secrets['mcp']['servers']
+                    
+                    # Banner tools
+                    if mcp_servers.get('banner_tools') and mcp_servers['banner_tools'].get('env'):
+                        banner_env = mcp_servers['banner_tools']['env']
+                        for key, val in banner_env.items():
+                            if val and val != '<your-api-key-here>':  # Skip placeholder values
+                                os.environ[key] = val
+                                print(f"✓ {key} loaded from banner_tools")
+                    
+                    # Video tools
+                    if mcp_servers.get('video_tools') and mcp_servers['video_tools'].get('env'):
+                        video_env = mcp_servers['video_tools']['env']
+                        for key, val in video_env.items():
+                            if val and val != '<your-api-key-here>':  # Skip placeholder values
+                                os.environ[key] = val
+                                print(f"✓ {key} loaded from video_tools")
+            
+            print("✅ All API keys loaded successfully")
+            
+        except Exception as e:
+            print(f"❌ Error loading secrets: {e}")
+            print("⚠️  Will use environment variables instead")
+    else:
+        print(f"⚠️  Secrets file not found: {secrets_path}")
+        print("⚠️  Will use environment variables instead")
+        return False
 # Load keys on startup
 load_api_keys()
 
@@ -83,6 +117,18 @@ if 'selected_video_model' not in st.session_state:
     st.session_state.selected_video_model = 'veo'  # Default to Veo 3.1
 if 'agent_conversation' not in st.session_state:
     st.session_state.agent_conversation = []
+if 'weather_automation' not in st.session_state:
+    st.session_state.weather_automation = False
+if 'last_weather_check' not in st.session_state:
+    st.session_state.last_weather_check = None
+if 'weather_location' not in st.session_state:
+    st.session_state.weather_location = "London"
+if 'weather_font' not in st.session_state:
+    st.session_state.weather_font = "Arial"
+if 'weather_primary_color' not in st.session_state:
+    st.session_state.weather_primary_color = "#FFFFFF"
+if 'weather_secondary_color' not in st.session_state:
+    st.session_state.weather_secondary_color = "#000000"
 
 # Helper functions
 def load_metadata(filepath):
@@ -92,6 +138,121 @@ def load_metadata(filepath):
         with open(metadata_file, 'r') as f:
             return json.load(f)
     return None
+
+def fetch_weather(location):
+    """Fetch current weather data from OpenWeatherMap API"""
+    import requests
+    
+    # Get API key from environment or secrets
+    api_key = os.getenv('OPENWEATHER_API_KEY')
+    if not api_key:
+        return {"error": "OPENWEATHER_API_KEY not set. Get free API key from https://openweathermap.org/api"}
+    
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={location}&appid={api_key}&units=metric"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "location": data['name'],
+                "temperature": round(data['main']['temp']),
+                "condition": data['weather'][0]['main'],
+                "description": data['weather'][0]['description'],
+                "humidity": data['main']['humidity'],
+                "wind_speed": round(data['wind']['speed'] * 3.6)  # Convert m/s to km/h
+            }
+        else:
+            return {"error": f"Weather API error: {response.status_code}"}
+    except Exception as e:
+        return {"error": f"Failed to fetch weather: {str(e)}"}
+
+async def generate_weather_banner(weather_data, font_family="Arial", primary_color="#FFFFFF", secondary_color="#000000", weather_includes=None):
+    """Generate a banner based on current weather"""
+    from banner_mcp_server import generate_banner
+    
+    if weather_includes is None:
+        weather_includes = {
+            'temperature': True,
+            'condition': True,
+            'humidity': False,
+            'wind': False,
+            'description': True
+        }
+    
+    # Create weather-appropriate description
+    temp = weather_data['temperature']
+    condition = weather_data['condition']
+    location = weather_data['location']
+    description = weather_data['description']
+    humidity = weather_data.get('humidity', 0)
+    wind_speed = weather_data.get('wind_speed', 0)
+    
+    # Build message based on selected weather elements
+    message_parts = []
+    
+    if weather_includes.get('temperature'):
+        if condition in ['Clear', 'Clouds']:
+            if temp > 25:
+                message_parts.append(f"☀️ {temp}°C")
+            elif temp > 15:
+                message_parts.append(f"🌤️ {temp}°C")
+            else:
+                message_parts.append(f"☁️ {temp}°C")
+        elif condition == 'Rain':
+            message_parts.append(f"🌧️ {temp}°C")
+        elif condition == 'Snow':
+            message_parts.append(f"❄️ {temp}°C")
+        elif condition == 'Thunderstorm':
+            message_parts.append(f"⛈️ {temp}°C")
+        else:
+            message_parts.append(f"🌡️ {temp}°C")
+    
+    if weather_includes.get('condition'):
+        message_parts.append(condition)
+    
+    if weather_includes.get('humidity'):
+        message_parts.append(f"💧 {humidity}%")
+    
+    if weather_includes.get('wind'):
+        message_parts.append(f"💨 {wind_speed} km/h")
+    
+    message = " | ".join(message_parts) if message_parts else f"{temp}°C"
+    
+    # Use description for CTA
+    cta = description.title() if weather_includes.get('description') else condition
+    
+    # Add font and color instructions to additional_instructions
+    style_instructions = f"""
+FONT STYLING:
+- Use {font_family} font family or similar sans-serif font
+- Make text bold and clear
+
+COLOR SCHEME:
+- Primary color: {primary_color} (use for main elements and background accents)
+- Secondary color: {secondary_color} (use for text or contrast)
+- Create a harmonious color palette based on these colors
+- Ensure high contrast for readability
+
+WEATHER THEME:
+- Reflect the weather condition: {condition}
+- Use weather-appropriate imagery and mood
+"""
+    
+    result_json = await generate_banner(
+        campaign_name=f"Weather Update - {location}",
+        brand_name=location,
+        banner_type="social",
+        message=message,
+        cta=cta,
+        additional_instructions=style_instructions,
+        reference_image_path="",
+        font_family=font_family,
+        primary_color=primary_color,
+        secondary_color=secondary_color
+    )
+    
+    return json.loads(result_json)
 
 def display_banner(filepath, metadata=None, key_suffix=""):
     """Display a banner with metadata"""
@@ -236,7 +397,147 @@ async def generate_video_direct(campaign_name, brand_name, video_type, descripti
     except Exception as e:
         return {"error": str(e)}
 
+def fetch_weather(location):
+    """Fetch weather data from API"""
+    import requests
+    try:
+        # Using Open-Meteo API (free, no key needed)
+        # First get coordinates for location
+        geocode_url = f"https://geocoding-api.open-meteo.com/v1/search?name={location}&count=1"
+        geo_response = requests.get(geocode_url, timeout=10)
+        geo_data = geo_response.json()
+        
+        if not geo_data.get('results'):
+            return {"error": f"Location '{location}' not found"}
+        
+        lat = geo_data['results'][0]['latitude']
+        lon = geo_data['results'][0]['longitude']
+        
+        # Get weather data
+        weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto"
+        weather_response = requests.get(weather_url, timeout=10)
+        weather_data = weather_response.json()
+        
+        current = weather_data['current']
+        
+        # Map weather codes to conditions
+        weather_codes = {
+            0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+            45: "Foggy", 48: "Foggy", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
+            61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow",
+            77: "Snow grains", 80: "Light showers", 81: "Showers", 82: "Heavy showers",
+            85: "Light snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Heavy thunderstorm"
+        }
+        
+        condition = weather_codes.get(current['weather_code'], "Unknown")
+        
+        return {
+            "location": location,
+            "temperature": current['temperature_2m'],
+            "condition": condition,
+            "wind_speed": current['wind_speed_10m'],
+            "weather_code": current['weather_code']
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+async def generate_weather_banner(weather_data, font_family="Arial", primary_color="#1E90FF", secondary_color="#FFFFFF"):
+    """Generate a banner based on weather conditions"""
+    temp = weather_data['temperature']
+    condition = weather_data['condition']
+    location = weather_data['location']
+    
+    # Create weather-appropriate message
+    if "rain" in condition.lower() or "drizzle" in condition.lower():
+        message = f"Rainy Day in {location}"
+        emoji = "🌧️"
+    elif "snow" in condition.lower():
+        message = f"Snowy Day in {location}"
+        emoji = "❄️"
+    elif "thunder" in condition.lower():
+        message = f"Stormy Weather in {location}"
+        emoji = "⛈️"
+    elif "clear" in condition.lower():
+        message = f"Sunny Day in {location}"
+        emoji = "☀️"
+    elif "cloud" in condition.lower():
+        message = f"Cloudy Day in {location}"
+        emoji = "☁️"
+    elif "fog" in condition.lower():
+        message = f"Foggy Day in {location}"
+        emoji = "🌫️"
+    else:
+        message = f"Weather in {location}"
+        emoji = "🌤️"
+    
+    # Generate banner with weather info
+    campaign_name = f"Weather Update {datetime.now().strftime('%H:%M')}"
+    brand_name = f"{emoji} Weather"
+    cta = f"{int(temp)}°C"
+    
+    # Add font and color instructions to additional_instructions
+    style_instructions = f"""
+FONT STYLING:
+- Use {font_family} font family or similar sans-serif font
+- Make text bold and clear
+
+COLOR SCHEME:
+- Primary color: {primary_color} (use for main elements and background accents)
+- Secondary color: {secondary_color} (use for text or contrast)
+- Create a harmonious color palette based on these colors
+- Ensure high contrast for readability
+
+WEATHER THEME:
+- Reflect the weather condition: {condition}
+- Use weather-appropriate imagery and mood
+"""
+    
+    from banner_mcp_server import generate_banner
+    
+    result_json = await generate_banner(
+        campaign_name=campaign_name,
+        brand_name=brand_name,
+        banner_type="social",
+        message=message,
+        cta=cta,
+        additional_instructions=style_instructions
+    )
+    
+    return json.loads(result_json)
+
+def check_weather_automation():
+    """Check if weather automation should run"""
+    if not st.session_state.weather_automation:
+        return
+    
+    now = datetime.now()
+    last_check = st.session_state.last_weather_check
+    
+    # Check if 15 minutes have passed or first run
+    if last_check is None or (now - last_check).seconds >= 900:  # 900 seconds = 15 minutes
+        st.session_state.last_weather_check = now
+        
+        # Fetch weather and generate banner
+        weather_data = fetch_weather(st.session_state.weather_location)
+        
+        if "error" not in weather_data:
+            # Get font and color from session state if available
+            font = st.session_state.get('weather_font', 'Arial')
+            primary = st.session_state.get('weather_primary_color', '#1E90FF')
+            secondary = st.session_state.get('weather_secondary_color', '#FFFFFF')
+            
+            result = asyncio.run(generate_weather_banner(weather_data, font, primary, secondary))
+            
+            if result.get('success'):
+                st.toast(f"🌤️ Weather banner generated for {weather_data['location']}!", icon="✅")
+                return result
+    
+    return None
+
 def main():
+    # Check weather automation (runs every 15 minutes if enabled)
+    check_weather_automation()
+    
     # Header
     st.markdown('<h1 class="main-header">🎨 Marketing Content Generator</h1>', unsafe_allow_html=True)
     
@@ -364,22 +665,12 @@ def main():
                 user_prompt += f"\n\n[ATTACHED_IMAGE: {agent_image_path}]"
             
             try:
-                from agent import fast
+                from agent import run_single_prompt
                 
                 async def run_agent_with_conversation(prompt, history):
-                    async with fast.run() as agent:
-                        if history:
-                            context_messages = []
-                            for msg in history[-6:]:
-                                context_messages.append(f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}")
-                            
-                            full_context = "\n\n".join(context_messages)
-                            full_prompt = f"CONVERSATION HISTORY:\n{full_context}\n\nCURRENT USER MESSAGE:\n{prompt}"
-                        else:
-                            full_prompt = prompt
-                        
-                        response = await agent.marketing_orchestrator.send(full_prompt)
-                        return response
+                    # Use the agent's built-in conversation management
+                    response = await run_single_prompt(prompt)
+                    return response
                 
                 with st.spinner("🤖 Agent is thinking..."):
                     result = asyncio.run(run_agent_with_conversation(
@@ -421,8 +712,85 @@ def main():
                 message = st.text_input("Message*", "Up to 70% Off", help="Keep under 8 words")
                 cta = st.text_input("Call to Action*", "Shop Now", help="1-3 words like 'Shop Now'")
                 
+                # STYLE SETTINGS INSIDE FORM
+                st.markdown("##### 🎨 Style Settings")
+                col_style1, col_style2 = st.columns(2)
+                with col_style1:
+                    global_font = st.selectbox(
+                        "Font Family",
+                        options=['Default', 'Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Verdana', 'Courier', 'Impact', 'Comic Sans'],
+                        help="Font will be used for this banner",
+                        key='banner_font'
+                    )
+                        
+                with col_style2:
+                    global_color_mode = st.radio(
+                        "Color Mode",
+                        options=['Auto', 'Custom'],
+                        horizontal=True,
+                        help="Auto lets AI choose colors, Custom uses your colors",
+                        key='banner_color_mode'
+                    )
+                
+                # ALWAYS show color fields - ALWAYS ENABLED
+                st.markdown("---")
+                st.markdown("**🎨 Brand Colors**")
+                
+                if global_color_mode == 'Auto':
+                    st.caption("ℹ️ Color Mode is set to 'Auto' - AI will choose colors. To use custom colors, select 'Custom' above.")
+                else:
+                    st.info("🎨 Enter hex color codes (e.g., #FF4B4B for red, #FFFFFF for white)")
+                
+                col_gc1, col_gc2 = st.columns(2)
+                with col_gc1:
+                    global_primary = st.text_input(
+                        "🔴 Primary Color (Hex)", 
+                        value='#FF4B4B', 
+                        help="Enter hex code like #FF4B4B (red) or #0000FF (blue)", 
+                        key='banner_primary',
+                        max_chars=7,
+                        placeholder="#FF4B4B"
+                    )
+                with col_gc2:
+                    global_secondary = st.text_input(
+                        "⚪ Secondary Color (Hex)", 
+                        value='#FFFFFF', 
+                        help="Enter hex code like #FFFFFF (white) or #000000 (black)", 
+                        key='banner_secondary',
+                        max_chars=7,
+                        placeholder="#FFFFFF"
+                    )
+                
+                # Show preview and validation only when Custom mode
+                if global_color_mode == 'Custom':
+                    if global_primary and global_secondary:
+                        # Check if valid hex
+                        import re
+                        if re.match(r'^#[0-9A-Fa-f]{6}$', global_primary) and re.match(r'^#[0-9A-Fa-f]{6}$', global_secondary):
+                            col_p1, col_p2 = st.columns(2)
+                            with col_p1:
+                                st.markdown(f'<div style="background-color: {global_primary}; padding: 15px; border-radius: 5px; text-align: center; color: white; font-weight: bold; border: 2px solid #ddd;">Primary Preview</div>', unsafe_allow_html=True)
+                            with col_p2:
+                                st.markdown(f'<div style="background-color: {global_secondary}; padding: 15px; border-radius: 5px; text-align: center; border: 2px solid #ddd; font-weight: bold;">Secondary Preview</div>', unsafe_allow_html=True)
+                        else:
+                            st.warning("⚠️ Please enter valid hex codes (format: #RRGGBB)")
+                    
+                    # Common color suggestions
+                    with st.expander("💡 Common Color Codes - Click to See Examples"):
+                        st.markdown("""
+                        **Reds:** #FF0000 (bright red) • #FF4B4B (coral red) • #DC143C (crimson)  
+                        **Blues:** #0000FF (bright blue) • #1E90FF (dodger blue) • #4169E1 (royal blue)  
+                        **Greens:** #00FF00 (bright green) • #32CD32 (lime green) • #228B22 (forest green)  
+                        **Neutrals:** #FFFFFF (white) • #000000 (black) • #808080 (gray) • #CCCCCC (light gray)  
+                        **Purples:** #800080 (purple) • #9370DB (medium purple) • #8B008B (dark purple)  
+                        **Oranges:** #FFA500 (orange) • #FF8C00 (dark orange) • #FFD700 (gold)  
+                        **Yellows:** #FFFF00 (yellow) • #FFD700 (gold) • #FFA500 (orange-yellow)
+                        
+                        💡 **Tip:** Copy and paste these codes into the fields above!
+                        """)
+                
                 # IMAGE UPLOAD for style reference
-                st.markdown("##### 🎨 Optional: Upload Reference Image")
+                st.markdown("##### 📎 Optional: Upload Reference Image")
                 reference_image = st.file_uploader(
                     "Upload an image for style inspiration (optional)",
                     type=['png', 'jpg', 'jpeg'],
@@ -430,12 +798,69 @@ def main():
                     key="banner_ref_img"
                 )
                 
+                # WEATHER CONDITIONS SELECTION - NOW INSIDE FORM
+                st.markdown("##### 🌤️ Weather Conditions (Optional)")
+                weather_enabled = st.checkbox(
+                    "Include Weather Data",
+                    value=st.session_state.get('include_weather', False),
+                    help="Add current weather information to the banner",
+                    key='include_weather_toggle'
+                )
+                
+                # Initialize w_location with default
+                w_location = st.session_state.weather_location
+                
+                if weather_enabled:
+                    w_location = st.text_input(
+                        "Location",
+                        value=st.session_state.weather_location,
+                        help="City name for weather data",
+                        key='weather_location_input'
+                    )
+                    st.session_state.weather_location = w_location
+                    
+                    st.markdown("**Select Weather Data to Include:**")
+                    col_w1, col_w2, col_w3 = st.columns(3)
+                    with col_w1:
+                        w_temp = st.checkbox("Temperature", value=True, key='w_temp')
+                        w_condition = st.checkbox("Condition", value=True, key='w_condition')
+                    with col_w2:
+                        w_humidity = st.checkbox("Humidity", value=False, key='w_humidity')
+                        w_wind = st.checkbox("Wind Speed", value=False, key='w_wind')
+                    with col_w3:
+                        w_description = st.checkbox("Description", value=True, key='w_description')
+                    
+                    # Store in session state
+                    st.session_state.weather_includes = {
+                        'temperature': w_temp,
+                        'condition': w_condition,
+                        'humidity': w_humidity,
+                        'wind': w_wind,
+                        'description': w_description
+                    }
+                
                 submitted = st.form_submit_button("🎨 Generate Banner", type="primary", use_container_width=True)
             
             if submitted:
+                # Update session state for weather automation to use these settings
+                if global_font != 'Default':
+                    st.session_state.weather_font = global_font
+                if global_color_mode == 'Custom' and global_primary and global_secondary:
+                    st.session_state.weather_primary_color = global_primary
+                    st.session_state.weather_secondary_color = global_secondary
+                
                 if not all([campaign, brand, message, cta]):
                     st.error("Please fill in all required fields")
                 else:
+                    # Check if weather is enabled
+                    weather_data = None
+                    if weather_enabled and w_location:
+                        with st.spinner("Fetching weather data..."):
+                            weather_data = fetch_weather(w_location)
+                            if "error" in weather_data:
+                                st.warning(f"Weather API error: {weather_data['error']}. Generating banner without weather data.")
+                                weather_data = None
+                    
                     # Save reference image if uploaded
                     reference_image_path = ""
                     if reference_image is not None:
@@ -452,11 +877,66 @@ def main():
                         
                         st.info(f"📎 Reference image saved: {ref_filename}")
                     
+                    # Use form's font and colors
+                    font_to_use = global_font if global_font != 'Default' else 'Arial'
+                    primary_to_use = global_primary if global_color_mode == 'Custom' and global_primary else '#FFFFFF'
+                    secondary_to_use = global_secondary if global_color_mode == 'Custom' and global_secondary else '#000000'
+                    
+                    # Build style instructions
+                    style_instructions = ""
+                    if global_font != 'Default':
+                        style_instructions += f"\nFONT: Use {global_font} font family or similar style."
+                    if global_color_mode == 'Custom' and global_primary and global_secondary:
+                        style_instructions += f"\nCOLORS: Primary color {global_primary}, Secondary color {global_secondary}. Use these colors prominently in the design."
+                    
+                    # Add weather data to message if available
+                    final_message = message
+                    final_cta = cta
+                    if weather_data and "error" not in weather_data:
+                        weather_includes = st.session_state.get('weather_includes', {
+                            'temperature': True,
+                            'condition': True,
+                            'humidity': False,
+                            'wind': False,
+                            'description': True
+                        })
+                        
+                        # Build weather info string - use .get() for safe access
+                        weather_parts = []
+                        if weather_includes.get('temperature') and 'temperature' in weather_data:
+                            weather_parts.append(f"{weather_data['temperature']}°C")
+                        if weather_includes.get('condition') and 'condition' in weather_data:
+                            weather_parts.append(weather_data['condition'])
+                        if weather_includes.get('humidity') and 'humidity' in weather_data:
+                            weather_parts.append(f"{weather_data['humidity']}% humidity")
+                        if weather_includes.get('wind') and 'wind_speed' in weather_data:
+                            weather_parts.append(f"{weather_data['wind_speed']} km/h wind")
+                        
+                        weather_str = " | ".join(weather_parts)
+                        final_message = f"{message} | {weather_str}" if weather_parts else message
+                        
+                        # Safely get description for CTA
+                        if weather_includes.get('description') and 'description' in weather_data:
+                            final_cta = weather_data.get('description', cta).title()
+                    
                     with st.spinner("🎨 Generating banner... (10-30 seconds)"):
-                        result = asyncio.run(generate_banner_direct(
-                            campaign, brand, banner_type, message, cta, 
-                            reference_image_path=reference_image_path
+                        # Call modified function
+                        from banner_mcp_server import generate_banner
+                        
+                        result_json = asyncio.run(generate_banner(
+                            campaign_name=campaign,
+                            brand_name=brand,
+                            banner_type=banner_type,
+                            message=final_message,
+                            cta=final_cta,
+                            additional_instructions=style_instructions,
+                            reference_image_path=reference_image_path,
+                            font_family=font_to_use,
+                            primary_color=primary_to_use,
+                            secondary_color=secondary_to_use,
+                            weather_data=weather_data  # Pass weather data for scene modification
                         ))
+                        result = json.loads(result_json)
                         
                         if "error" in result:
                             st.error(f"❌ Error: {result['error']}")
