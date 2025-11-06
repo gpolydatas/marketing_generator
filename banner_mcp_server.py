@@ -161,6 +161,16 @@ async def generate_banner(
             "error": "OPENAI_API_KEY environment variable not set"
         })
     
+    # Check if this is a no-text banner - CRITICAL FIX
+    no_text = (not brand_name and not message and not cta) or "NO TEXT" in additional_instructions.upper()
+    
+    # If no_text is detected, force empty strings
+    if no_text:
+        brand_name = ""
+        message = ""
+        cta = ""
+        print("🚫 NO-TEXT MODE: Forcing empty text fields")
+    
     # Build weather scene description
     weather_scene = ""
     if weather_data and isinstance(weather_data, dict) and "error" not in weather_data:
@@ -170,22 +180,22 @@ async def generate_banner(
         
         # Map weather conditions to visual scene modifications
         if 'rain' in condition or 'rain' in description:
-            weather_scene = "Scene shows rainy weather: wet surfaces, raindrops, puddles, gray overcast sky, rain falling"
+            weather_scene = "wet surfaces, raindrops, puddles, gray overcast sky"
         elif 'snow' in condition or 'snow' in description:
-            weather_scene = "Scene shows snowy weather: snow falling, snow on ground, cold atmosphere, white/gray sky"
+            weather_scene = "snow falling, snow on ground, cold atmosphere"
         elif 'storm' in condition or 'thunder' in condition:
-            weather_scene = "Scene shows stormy weather: dark dramatic clouds, lightning, heavy rain, intense atmosphere"
+            weather_scene = "dark dramatic clouds, lightning, heavy rain"
         elif 'cloud' in condition or 'overcast' in description:
-            weather_scene = "Scene shows cloudy/overcast weather: gray clouds, diffused light, muted colors, cool atmosphere"
+            weather_scene = "gray clouds, diffused light, muted colors"
         elif 'clear' in condition or 'sun' in description:
             if temp > 25:
-                weather_scene = "Scene shows hot sunny weather: bright sunshine, strong shadows, warm golden light, clear blue sky, heat haze"
+                weather_scene = "bright sunshine, strong shadows, warm golden light"
             else:
-                weather_scene = "Scene shows clear pleasant weather: blue sky, soft sunlight, comfortable atmosphere"
+                weather_scene = "blue sky, soft sunlight"
         elif 'mist' in condition or 'fog' in description:
-            weather_scene = "Scene shows misty/foggy weather: reduced visibility, fog, hazy atmosphere, muted tones"
+            weather_scene = "reduced visibility, fog, hazy atmosphere"
         else:
-            weather_scene = f"Scene reflects current weather: {description}"
+            weather_scene = f"{description}"
     
     # Generate prompt
     specs = BANNER_SPECS[banner_type]
@@ -198,8 +208,30 @@ async def generate_banner(
         use_variation = True
         reference_image_context = f" (using {os.path.basename(reference_image_path)} as base)"
         
-        # SHORT PROMPT for edit mode (max 1000 chars)
-        prompt = f"""Modify this image to show different weather conditions while adding text.
+        if no_text:
+            # SHORT PROMPT for edit mode - NO TEXT VERSION
+            prompt = f"""Create a visual composition based on this image.
+
+Remove all text elements completely.
+
+{weather_scene if weather_scene else ""}
+
+Create a clean visual design with:
+- No text, words, or letters of any kind
+- No brand names or messages
+- Pure visual elements only
+- Professional composition
+
+Technical requirements:
+- Remove all text elements
+- No call-to-action buttons
+- No written content"""
+            
+            if additional_instructions:
+                prompt += f"\n\n{additional_instructions}"
+        else:
+            # SHORT PROMPT for edit mode - WITH TEXT
+            prompt = f"""Modify this image to show different weather conditions while adding text.
 
 {weather_scene if weather_scene else "Keep the current weather/atmosphere."}
 
@@ -213,12 +245,52 @@ Style:
 - Colors: {primary_color}, {secondary_color}
 - Professional banner ad
 - Text must be exact and legible"""
-        
-        if additional_instructions:
-            prompt += f"\n\nNotes: {additional_instructions[:150]}"
+            
+            if additional_instructions:
+                prompt += f"\n\nNotes: {additional_instructions}"
     else:
-        # FULL PROMPT for generation mode
-        prompt = f"""Create a professional banner advertisement for {brand_name}'s {campaign_name}.
+        if no_text:
+            # FULL PROMPT for generation mode - NO TEXT VERSION
+            # Use a completely different approach - focus on pure visual design
+            prompt = f"""Create a high-quality visual composition for digital display.
+
+TECHNICAL REQUIREMENTS:
+- Dimensions: {specs['width']}x{specs['height']} pixels
+- COMPLETELY TEXT-FREE: No words, letters, or text of any kind
+- No brand names, slogans, or messages
+- No call-to-action elements
+- Pure visual design only
+
+VISUAL STYLE:
+- Professional digital artwork
+- Clean, modern aesthetic
+- Strong visual composition
+- Balanced color palette
+- No text elements whatsoever
+
+COLOR GUIDANCE:
+- Primary tone: {primary_color}
+- Secondary tone: {secondary_color}
+- Harmonious color scheme
+
+COMPOSITION RULES:
+- Do not include any text areas
+- Do not create space for text
+- Focus entirely on visual elements
+- No buttons, labels, or written content
+
+This must be 100% text-free visual art for digital display."""
+            
+            if additional_instructions:
+                prompt += f"\n\n{additional_instructions}"
+                
+            # Add weather context if available
+            if weather_scene:
+                prompt += f"\n\nVisual atmosphere: {weather_scene}"
+                
+        else:
+            # FULL PROMPT for generation mode - WITH TEXT
+            prompt = f"""Create a professional banner advertisement for {brand_name}'s {campaign_name}.
 
 CRITICAL - TEXT MUST BE EXACT AND LEGIBLE:
 - Brand name: "{brand_name}" (spell exactly, make it LARGE and BOLD)
@@ -261,7 +333,7 @@ CRITICAL RULES:
 Make the text perfect - that's the priority."""
         
         # Add additional instructions if provided
-        if additional_instructions:
+        if additional_instructions and not no_text:
             prompt += f"\n\nIMPROVEMENTS FOR THIS ATTEMPT:\n{additional_instructions}"
             prompt += f"\n\nREMINDER: Brand='{brand_name}', Message='{message}', CTA='{cta}' - spell exactly!"
     
@@ -284,7 +356,10 @@ Make the text perfect - that's the priority."""
         # When reference image provided, analyze with Vision then generate
         if use_variation and reference_image_path:
             print(f"\n{'='*60}")
-            print(f"🖼️  REFERENCE IMAGE MODE")
+            if no_text:
+                print(f"🖼️  REFERENCE IMAGE MODE - NO TEXT")
+            else:
+                print(f"🖼️  REFERENCE IMAGE MODE - WITH TEXT")
             print(f"{'='*60}")
             print(f"Reference: {os.path.basename(reference_image_path)}")
             
@@ -300,7 +375,7 @@ Make the text perfect - that's the priority."""
                     "content": [
                         {
                             "type": "text",
-                            "text": "Describe this image's subject, style, composition, colors, lighting, and mood. Be specific. Under 150 words."
+                            "text": "Describe this image's visual style, composition, colors, and mood. Focus on visual elements only. Under 100 words."
                         },
                         {
                             "type": "image_url",
@@ -308,7 +383,7 @@ Make the text perfect - that's the priority."""
                         }
                     ]
                 }],
-                max_tokens=250
+                max_tokens=200
             )
             
             style_desc = vision_response.choices[0].message.content
@@ -324,7 +399,7 @@ Make the text perfect - that's the priority."""
             print(f"\n☁️  WEATHER SCENE DESCRIPTION:\n{weather_scene if weather_scene else 'None'}\n")
             
             # Build final prompt - KEEP IT SHORT for DALL-E stability
-            if brand_name or message or cta:
+            if not no_text and (brand_name or message or cta):
                 final_prompt = f"""{style_desc[:150]}
 
 {weather_scene[:100] if weather_scene else ""}
@@ -332,13 +407,13 @@ Make the text perfect - that's the priority."""
 Text: "{brand_name}" "{message}" "{cta}"
 {width}x{height}px"""
             else:
-                # No text version - even shorter
-                final_prompt = f"""{style_desc[:200]}
+                # No text version - focus on visual description only
+                final_prompt = f"""{style_desc[:180]}
 
-{weather_scene[:120] if weather_scene else "Professional setting"}
+{weather_scene[:100] if weather_scene else "Visual composition"}
 
-{width}x{height}px, no text"""
-
+{width}x{height}px, text-free visual design, no words or letters"""
+            
             # Ensure under 400 chars to avoid DALL-E errors
             if len(final_prompt) > 400:
                 final_prompt = final_prompt[:400]
@@ -349,9 +424,15 @@ Text: "{brand_name}" "{message}" "{cta}"
         
         else:
             print(f"\n{'='*60}")
-            print(f"🎨 STANDARD GENERATION (no reference)")
+            if no_text:
+                print(f"🎨 TEXT-FREE VISUAL DESIGN")
+                print(f"🚫 STRICT NO-TEXT MODE ACTIVE")
+            else:
+                print(f"🎨 STANDARD BANNER (with text)")
             print(f"{'='*60}\n")
             print(f"Prompt length: {len(prompt)} chars\n")
+            if no_text:
+                print("✅ DALL-E instructed: COMPLETELY TEXT-FREE VISUAL DESIGN")
         
         # Generate with DALL-E 3
         print(f"🚀 Calling DALL-E 3 ({size})...")
@@ -374,7 +455,8 @@ Text: "{brand_name}" "{message}" "{cta}"
         if img_response.status_code == 200:
             # Save with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"banner_{banner_type}_{size}_{timestamp}.png"
+            text_indicator = "notext" if no_text else "text"
+            filename = f"banner_{banner_type}_{text_indicator}_{timestamp}.png"
             
             # Save to local outputs directory
             output_dir = os.path.join(os.path.dirname(__file__), "outputs")
@@ -405,7 +487,8 @@ Text: "{brand_name}" "{message}" "{cta}"
                 "size": size,
                 "file_size_mb": round(file_size, 2),
                 "revised_prompt": revised_prompt,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "no_text": no_text
             }
             
             metadata_file = filepath.replace('.png', '.json')
@@ -420,7 +503,8 @@ Text: "{brand_name}" "{message}" "{cta}"
                 "size": size,
                 "file_size_mb": round(file_size, 2),
                 "revised_prompt": revised_prompt,
-                "metadata_file": metadata_file
+                "metadata_file": metadata_file,
+                "no_text": no_text
             }, indent=2)
         else:
             return json.dumps({
@@ -431,7 +515,6 @@ Text: "{brand_name}" "{message}" "{cta}"
         return json.dumps({
             "error": f"DALL-E API error: {str(e)}"
         })
-
 
 async def validate_banner(
     filepath: str,

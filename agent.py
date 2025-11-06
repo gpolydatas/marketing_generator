@@ -1,593 +1,645 @@
 #!/usr/bin/env python3
 """
-MARKETING CONTENT ORCHESTRATOR AGENT - FIXED PARAMETER UPDATING
+BANNER GENERATION MCP SERVER
+Exposes banner generation and validation as MCP tools
 """
 
-import asyncio
-import sys
 import os
 import json
-import re
-from typing import Dict, List, Optional, Tuple
+import base64
 from datetime import datetime
+from openai import OpenAI
+from mcp.server import Server
+from mcp.types import Tool, TextContent
+from mcp.server.stdio import stdio_server
 
-# Add current directory to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Banner specifications
+BANNER_SPECS = {
+    "leaderboard": {"width": 728, "height": 90},
+    "social": {"width": 1200, "height": 628},
+    "square": {"width": 1024, "height": 1024},
+}
 
-# Import the MCP servers directly
-from banner_mcp_server import generate_banner, validate_banner
-from video_mcp_server import generate_video
+# Create MCP server
+app = Server("banner-tools")
 
-class MarketingOrchestrator:
-    """Advanced marketing agent with proper parameter updating"""
-    
-    def __init__(self):
-        self.conversation_state = {}
-        self.max_context_messages = 3
-    
-    async def process_request(self, user_input: str, session_id: str = "default") -> str:
-        """Process user requests with proper parameter updating"""
-        
-        # Initialize or get session
-        if session_id not in self.conversation_state:
-            self.conversation_state[session_id] = {
-                'step': 'start',
-                'content_type': None,
-                'params': {},
-                'context': [],
-                'attached_image': None,
-                'image_filename': None,
-                'image_path': None,
-                'missing_param': None  # Track what we're currently asking for
+
+@app.list_tools()
+async def list_tools() -> list[Tool]:
+    """List available tools"""
+    return [
+        Tool(
+            name="generate_banner",
+            description="Generate a banner advertisement using DALL-E 3",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "campaign_name": {
+                        "type": "string",
+                        "description": "Name of the advertising campaign"
+                    },
+                    "brand_name": {
+                        "type": "string",
+                        "description": "Brand/company name"
+                    },
+                    "banner_type": {
+                        "type": "string",
+                        "enum": ["leaderboard", "social", "square"],
+                        "description": "Type of banner"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Main marketing message to display"
+                    },
+                    "cta": {
+                        "type": "string",
+                        "description": "Call-to-action text"
+                    },
+                    "additional_instructions": {
+                        "type": "string",
+                        "description": "Optional additional instructions for regeneration",
+                        "default": ""
+                    },
+                    "reference_image_path": {
+                        "type": "string",
+                        "description": "Optional: Full path to reference image for image-to-image generation (style transfer, inspiration)",
+                        "default": ""
+                    },
+                    "font_family": {
+                        "type": "string",
+                        "description": "Optional: Font family to use (Arial, Helvetica, Times New Roman, Georgia, Verdana, Courier, Impact)",
+                        "default": "Arial"
+                    },
+                    "primary_color": {
+                        "type": "string",
+                        "description": "Optional: Primary color hex code (e.g., #FFFFFF)",
+                        "default": "#FFFFFF"
+                    },
+                    "secondary_color": {
+                        "type": "string",
+                        "description": "Optional: Secondary/accent color hex code (e.g., #000000)",
+                        "default": "#000000"
+                    }
+                },
+                "required": ["campaign_name", "brand_name", "banner_type", "message", "cta"]
             }
+        ),
+        Tool(
+            name="validate_banner",
+            description="Validate a generated banner against quality guidelines",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "Full path to the banner image file"
+                    },
+                    "campaign_name": {
+                        "type": "string",
+                        "description": "Name of campaign for context"
+                    },
+                    "brand_name": {
+                        "type": "string",
+                        "description": "Expected brand name"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Expected main message"
+                    },
+                    "cta": {
+                        "type": "string",
+                        "description": "Expected call-to-action text"
+                    }
+                },
+                "required": ["filepath", "campaign_name", "brand_name", "message", "cta"]
+            }
+        )
+    ]
+
+
+@app.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    """Handle tool calls"""
+    
+    if name == "generate_banner":
+        result = await generate_banner(**arguments)
+        return [TextContent(type="text", text=result)]
+    
+    elif name == "validate_banner":
+        result = await validate_banner(**arguments)
+        return [TextContent(type="text", text=result)]
+    
+    else:
+        return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
+
+
+async def generate_banner(
+    campaign_name: str,
+    brand_name: str,
+    banner_type: str,
+    message: str,
+    cta: str,
+    additional_instructions: str = "",
+    reference_image_path: str = "",
+    font_family: str = "Arial",
+    primary_color: str = "#FFFFFF",
+    secondary_color: str = "#000000",
+    weather_data: dict = None
+) -> str:
+    """Generate banner image using DALL-E 3 with optional reference image, font, color customization, and weather conditions"""
+    
+    # Validate banner type
+    if banner_type not in BANNER_SPECS:
+        return json.dumps({
+            "error": f"Invalid banner_type. Must be one of: {list(BANNER_SPECS.keys())}"
+        })
+    
+    # Check API key
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return json.dumps({
+            "error": "OPENAI_API_KEY environment variable not set"
+        })
+    
+    # Check if this is a no-text banner
+    no_text = not brand_name and not message and not cta
+    
+    # Build weather scene description
+    weather_scene = ""
+    if weather_data and isinstance(weather_data, dict) and "error" not in weather_data:
+        condition = weather_data.get('condition', '').lower()
+        temp = weather_data.get('temperature', 20)
+        description = weather_data.get('description', '')
         
-        session = self.conversation_state[session_id]
-        
-        # Add user message to context
-        session['context'].append({'role': 'user', 'content': user_input, 'timestamp': datetime.now()})
-        
-        # Keep only last N messages
-        if len(session['context']) > self.max_context_messages * 2:
-            session['context'] = session['context'][-self.max_context_messages * 2:]
-        
-        # Extract information from current and previous messages
-        extracted_params = self._extract_parameters_from_context(session['context'])
-        
-        # Update session parameters with extracted info
-        session['params'].update(extracted_params)
-        
-        # If we were asking for a specific parameter, store the user's response
-        if session.get('missing_param'):
-            param_name = session['missing_param']
-            session['params'][param_name] = user_input.strip()
-            session['missing_param'] = None
-        
-        # Extract attached image if present
-        attached_image_path = self._extract_attached_image(user_input)
-        if attached_image_path:
-            session['attached_image'] = attached_image_path
-            user_input = user_input.replace(f"[ATTACHED_IMAGE: {attached_image_path}]", "").strip()
-        
-        # Only check for image-to-video if explicit animation requested
-        if any(trigger in user_input.lower() for trigger in ['animate', 'turn into video', 'convert to video']):
-            image_filename, image_path = self._detect_image_filename(user_input)
-            if image_filename:
-                session['image_filename'] = image_filename
-                session['image_path'] = image_path
-                session['content_type'] = 'image_to_video'
-                session['step'] = 'generate_image_to_video'
-        
-        # Handle the current step
-        if session['step'] == 'start':
-            response = await self._handle_start_step(session)
-            
-        elif session['step'] == 'clarify_intent':
-            response = await self._handle_clarify_intent(session)
-            
-        elif session['step'] == 'collect_banner_details':
-            response = await self._handle_collect_banner_details(session)
-            
-        elif session['step'] == 'collect_video_details':
-            response = await self._handle_collect_video_details(session)
-            
-        elif session['step'] == 'generate_banner':
-            response = await self._generate_banner(session)
-            
-        elif session['step'] == 'generate_video':
-            response = await self._generate_video(session)
-            
-        elif session['step'] == 'generate_image_to_video':
-            response = await self._generate_image_to_video(session)
-            
+        # Map weather conditions to visual scene modifications
+        if 'rain' in condition or 'rain' in description:
+            weather_scene = "Scene shows rainy weather: wet surfaces, raindrops, puddles, gray overcast sky, rain falling"
+        elif 'snow' in condition or 'snow' in description:
+            weather_scene = "Scene shows snowy weather: snow falling, snow on ground, cold atmosphere, white/gray sky"
+        elif 'storm' in condition or 'thunder' in condition:
+            weather_scene = "Scene shows stormy weather: dark dramatic clouds, lightning, heavy rain, intense atmosphere"
+        elif 'cloud' in condition or 'overcast' in description:
+            weather_scene = "Scene shows cloudy/overcast weather: gray clouds, diffused light, muted colors, cool atmosphere"
+        elif 'clear' in condition or 'sun' in description:
+            if temp > 25:
+                weather_scene = "Scene shows hot sunny weather: bright sunshine, strong shadows, warm golden light, clear blue sky, heat haze"
+            else:
+                weather_scene = "Scene shows clear pleasant weather: blue sky, soft sunlight, comfortable atmosphere"
+        elif 'mist' in condition or 'fog' in description:
+            weather_scene = "Scene shows misty/foggy weather: reduced visibility, fog, hazy atmosphere, muted tones"
         else:
-            response = "I'm not sure what to do next. Let's start over."
-            session['step'] = 'start'
-        
-        # Add assistant response to context
-        session['context'].append({'role': 'assistant', 'content': response, 'timestamp': datetime.now()})
-        
-        return response
+            weather_scene = f"Scene reflects current weather: {description}"
     
-    def _extract_parameters_from_context(self, context: List[Dict]) -> Dict:
-        """Extract parameters from conversation context"""
-        all_text = " ".join([msg['content'] for msg in context if msg['role'] == 'user'])
-        
-        params = {}
-        
-        # Extract brand names
-        brand_patterns = [
-            r'(?:brand|company|business)[:\s]+([A-Za-z0-9\s&]+?)(?:\s|$|,|\.)',
-            r'(?:for|from)\s+([A-Za-z0-9\s&]+?)(?:\s|$|,|\.)',
-        ]
-        
-        for pattern in brand_patterns:
-            match = re.search(pattern, all_text, re.IGNORECASE)
-            if match:
-                params['brand'] = match.group(1).strip()
-                break
-        
-        # Extract campaign names
-        campaign_patterns = [
-            r'(?:campaign|promotion)[:\s]+([A-Za-z0-9\s]+?)(?:\s|$|,|\.)',
-            r'\b(black friday|christmas|holiday|summer|winter|spring|fall|new year)\b',
-        ]
-        
-        for pattern in campaign_patterns:
-            match = re.search(pattern, all_text, re.IGNORECASE)
-            if match:
-                params['campaign'] = match.group(1).strip().title()
-                break
-        
-        # Extract messages/offers
-        message_patterns = [
-            r'(\d+% off)',
-            r'(\d+% discount)',
-            r'(up to \d+% off)',
-            r'(free shipping)',
-        ]
-        
-        for pattern in message_patterns:
-            match = re.search(pattern, all_text, re.IGNORECASE)
-            if match:
-                params['message'] = match.group(1)
-                break
-        
-        # Extract CTAs
-        cta_patterns = [
-            r'\b(shop now|buy now|learn more|sign up|get started)\b'
-        ]
-        
-        for pattern in cta_patterns:
-            match = re.search(pattern, all_text, re.IGNORECASE)
-            if match:
-                params['cta'] = match.group(1).title()
-                break
-        
-        return params
+    # Generate prompt
+    specs = BANNER_SPECS[banner_type]
     
-    async def _handle_start_step(self, session: Dict) -> str:
-        """Handle the initial step"""
-        content_type = self._determine_content_type_from_context(session['context'])
+    # Add reference image guidance if provided
+    reference_image_context = ""
+    use_variation = False
+    
+    if reference_image_path and os.path.exists(reference_image_path):
+        use_variation = True
+        reference_image_context = f" (using {os.path.basename(reference_image_path)} as base)"
         
-        if content_type == 'banner':
-            session['content_type'] = 'banner'
+        if no_text:
+            # SHORT PROMPT for edit mode - NO TEXT VERSION
+            prompt = f"""Modify this image to show different weather conditions.
+
+{weather_scene if weather_scene else "Keep the current weather/atmosphere."}
+
+Create a clean, professional banner advertisement with NO TEXT.
+Focus on visual appeal and composition."""
             
-            # Check if no text requested
-            all_text = " ".join([msg['content'] for msg in session['context'] if msg['role'] == 'user']).lower()
-            no_text = any(phrase in all_text for phrase in ['no text', 'no brand', 'no message', 'no cta', 'without text', 'no words'])
+            if additional_instructions:
+                prompt += f"\n\nNotes: {additional_instructions[:150]}"
+        else:
+            # SHORT PROMPT for edit mode - WITH TEXT
+            prompt = f"""Modify this image to show different weather conditions while adding text.
+
+{weather_scene if weather_scene else "Keep the current weather/atmosphere."}
+
+Add advertising text:
+Brand: "{brand_name}" (large, bold)
+Message: "{message}" (clear)
+CTA: "{cta}" (on button)
+
+Style:
+- Font: {font_family}
+- Colors: {primary_color}, {secondary_color}
+- Professional banner ad
+- Text must be exact and legible"""
             
+            if additional_instructions:
+                prompt += f"\n\nNotes: {additional_instructions[:150]}"
+    else:
+        if no_text:
+            # FULL PROMPT for generation mode - NO TEXT VERSION
+            prompt = f"""Create a professional, text-free banner advertisement for {campaign_name}.
+
+DESIGN REQUIREMENTS:
+- Dimensions: {specs['width']}x{specs['height']} pixels
+- Style: Clean, modern, professional advertising
+- NO TEXT AT ALL - completely text-free design
+- Focus on visual composition and aesthetic appeal
+- Professional advertising quality
+- Eye-catching visuals without any words
+
+COLOR SCHEME (if specified):
+- Primary color: {primary_color} (use for main elements)
+- Secondary color: {secondary_color} (use for accents)
+- Create a harmonious palette using these colors
+
+CRITICAL RULES:
+- Absolutely no text, words, or letters
+- No brand names or messages
+- Pure visual design only
+- Professional advertising quality
+- Visually compelling without text"""
+        else:
+            # FULL PROMPT for generation mode - WITH TEXT
+            prompt = f"""Create a professional banner advertisement for {brand_name}'s {campaign_name}.
+
+CRITICAL - TEXT MUST BE EXACT AND LEGIBLE:
+- Brand name: "{brand_name}" (spell exactly, make it LARGE and BOLD)
+- Main message: "{message}" (use these exact words, make it clear and readable)  
+- CTA button: "{cta}" (spell exactly, put on a prominent button)
+
+TYPOGRAPHY REQUIREMENTS:
+- Font style: {font_family} or similar clean, professional font
+- High contrast and legibility are critical
+- Text must be sharp and clear
+
+COLOR SCHEME REQUIREMENTS:
+- Primary color: {primary_color} (use for main elements, backgrounds, or key accents)
+- Secondary color: {secondary_color} (use for text, buttons, or contrast elements)
+- Create a harmonious palette using these colors
+- Ensure excellent contrast between text and background
+- Professional, eye-catching color application
+
+DESIGN REQUIREMENTS:
+- Dimensions: {specs['width']}x{specs['height']} pixels
+- Style: Clean, modern, professional advertising
+- Layout: Simple and uncluttered - text must be the focus
+- Brand prominence: Brand name is the largest element
+- CTA visibility: Call-to-action button stands out
+- Background: Clean or subtle - must not interfere with text readability
+
+TEXT HIERARCHY (in order of size):
+1. "{brand_name}" - Biggest, boldest, top or center
+2. "{message}" - Medium size, center area
+3. "{cta}" - On button, bottom or prominent position
+
+CRITICAL RULES:
+- Text must be crystal clear and easy to read
+- No decorative text or extra words
+- No complex patterns behind text
+- High contrast between text and background
+- Professional advertising quality
+- Use the specified font and color scheme
+
+Make the text perfect - that's the priority."""
+        
+        # Add additional instructions if provided
+        if additional_instructions:
+            prompt += f"\n\nIMPROVEMENTS FOR THIS ATTEMPT:\n{additional_instructions}"
+            if not no_text:
+                prompt += f"\n\nREMINDER: Brand='{brand_name}', Message='{message}', CTA='{cta}' - spell exactly!"
+    
+    
+    # Initialize OpenAI client
+    client = OpenAI(api_key=api_key)
+    
+    # Determine DALL-E size
+    width = specs['width']
+    height = specs['height']
+    
+    if width == height:
+        size = "1024x1024"
+    elif width > height:
+        size = "1792x1024"
+    else:
+        size = "1024x1792"
+    
+    try:
+        # When reference image provided, analyze with Vision then generate
+        if use_variation and reference_image_path:
+            print(f"\n{'='*60}")
+            print(f"🖼️  REFERENCE IMAGE MODE")
+            print(f"{'='*60}")
+            print(f"Reference: {os.path.basename(reference_image_path)}")
+            
+            # Analyze with GPT-4 Vision
+            with open(reference_image_path, "rb") as img_file:
+                img_data = base64.b64encode(img_file.read()).decode('utf-8')
+            
+            print(f"\n🔍 Analyzing image with GPT-4 Vision...")
+            vision_response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Describe this image's subject, style, composition, colors, lighting, and mood. Be specific. Under 150 words."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{img_data}"}
+                        }
+                    ]
+                }],
+                max_tokens=250
+            )
+            
+            style_desc = vision_response.choices[0].message.content
+            print(f"\n📊 VISION ANALYSIS:\n{style_desc}\n")
+            
+            # Print weather data
+            print(f"\n🌤️  WEATHER DATA:")
+            if weather_data:
+                for key, val in weather_data.items():
+                    print(f"  {key}: {val}")
+            else:
+                print("  None")
+            print(f"\n☁️  WEATHER SCENE DESCRIPTION:\n{weather_scene if weather_scene else 'None'}\n")
+            
+            # Build final prompt - KEEP IT SHORT for DALL-E stability
+            if not no_text and (brand_name or message or cta):
+                final_prompt = f"""{style_desc[:150]}
+
+{weather_scene[:100] if weather_scene else ""}
+
+Text: "{brand_name}" "{message}" "{cta}"
+{width}x{height}px"""
+            else:
+                # No text version - even shorter
+                final_prompt = f"""{style_desc[:200]}
+
+{weather_scene[:120] if weather_scene else "Professional setting"}
+
+{width}x{height}px, no text"""
+
+            # Ensure under 400 chars to avoid DALL-E errors
+            if len(final_prompt) > 400:
+                final_prompt = final_prompt[:400]
+            
+            print(f"\n📝 PROMPT TO DALL-E ({len(final_prompt)} chars):\n{'-'*60}\n{final_prompt}\n{'-'*60}\n")
+            
+            prompt = final_prompt
+        
+        else:
+            print(f"\n{'='*60}")
             if no_text:
-                # Skip collection, go straight to generation with empty text
-                session['params']['brand'] = ''
-                session['params']['message'] = ''
-                session['params']['cta'] = ''
-                session['step'] = 'generate_banner'
-                return await self._generate_banner(session)
-            elif self._has_sufficient_banner_params(session['params']):
-                session['step'] = 'generate_banner'
-                return await self._generate_banner(session)
+                print(f"🎨 TEXT-FREE GENERATION")
             else:
-                session['step'] = 'collect_banner_details'
-                return await self._handle_collect_banner_details(session)
-                
-        elif content_type == 'video':
-            session['content_type'] = 'video'
-            if session['image_path']:  # Image-to-video
-                session['step'] = 'generate_image_to_video'
-                return await self._generate_image_to_video(session)
-            elif self._has_sufficient_video_params(session['params']):
-                session['step'] = 'generate_video'
-                return await self._generate_video(session)
-            else:
-                session['step'] = 'collect_video_details'
-                return await self._handle_collect_video_details(session)
-                
-        elif content_type == 'image_to_video':
-            session['content_type'] = 'image_to_video'
-            session['step'] = 'generate_image_to_video'
-            return await self._generate_image_to_video(session)
+                print(f"🎨 STANDARD GENERATION (with text)")
+            print(f"{'='*60}\n")
+            print(f"Prompt length: {len(prompt)} chars\n")
+        
+        # Generate with DALL-E 3
+        print(f"🚀 Calling DALL-E 3 ({size})...")
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size=size,
+            quality="hd",
+            style="vivid",
+            n=1
+        )
+        
+        image_url = response.data[0].url
+        revised_prompt = getattr(response.data[0], 'revised_prompt', prompt)
+        
+        # Download image
+        import requests
+        img_response = requests.get(image_url)
+        
+        if img_response.status_code == 200:
+            # Save with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"banner_{banner_type}_{size}_{timestamp}.png"
             
+            # Save to local outputs directory
+            output_dir = os.path.join(os.path.dirname(__file__), "outputs")
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            filepath = os.path.join(output_dir, filename)
+            
+            with open(filepath, 'wb') as f:
+                f.write(img_response.content)
+            
+            file_size = len(img_response.content) / 1024 / 1024
+            
+            # Save metadata
+            metadata = {
+                "campaign": campaign_name,
+                "brand": brand_name,
+                "banner_type": banner_type,
+                "message": message,
+                "cta": cta,
+                "additional_instructions": additional_instructions,
+                "reference_image_path": reference_image_path if reference_image_path else None,
+                "font_family": font_family,
+                "primary_color": primary_color,
+                "secondary_color": secondary_color,
+                "filename": filename,
+                "filepath": filepath,
+                "url": image_url,
+                "size": size,
+                "file_size_mb": round(file_size, 2),
+                "revised_prompt": revised_prompt,
+                "timestamp": datetime.now().isoformat(),
+                "no_text": no_text
+            }
+            
+            metadata_file = filepath.replace('.png', '.json')
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            
+            return json.dumps({
+                "success": True,
+                "filename": filename,
+                "filepath": filepath,
+                "url": image_url,
+                "size": size,
+                "file_size_mb": round(file_size, 2),
+                "revised_prompt": revised_prompt,
+                "metadata_file": metadata_file,
+                "no_text": no_text
+            }, indent=2)
         else:
-            session['step'] = 'clarify_intent'
-            return await self._handle_clarify_intent(session)
+            return json.dumps({
+                "error": "Failed to download image from DALL-E"
+            })
+            
+    except Exception as e:
+        return json.dumps({
+            "error": f"DALL-E API error: {str(e)}"
+        })
+
+
+async def validate_banner(
+    filepath: str,
+    campaign_name: str,
+    brand_name: str,
+    message: str,
+    cta: str
+) -> str:
+    """Validate banner using Claude's vision capabilities"""
     
-    async def _handle_clarify_intent(self, session: Dict) -> str:
-        """Ask user to clarify what they want to create"""
-        return """What would you like me to create for you?
-
-🎨 **Banner** - Static image for ads/social media
-🎬 **Video** - Motion content with camera movements  
-✨ **Animate existing image** - Turn a banner into video
-
-Please tell me which you'd like!"""
+    # Check if file exists
+    if not os.path.exists(filepath):
+        return json.dumps({
+            "error": f"File not found: {filepath}"
+        })
     
-    async def _handle_collect_banner_details(self, session: Dict) -> str:
-        """Collect missing banner details"""
-        params = session['params']
-        
-        # Check if user wants no text
-        all_text = " ".join([msg['content'] for msg in session['context'] if msg['role'] == 'user']).lower()
-        no_text_requested = any(phrase in all_text for phrase in ['no text', 'no brand', 'no message', 'no cta', 'without text'])
-        
-        if no_text_requested:
-            # Set minimal defaults for no-text banner
-            params['brand'] = ''
-            params['message'] = ''
-            params['cta'] = ''
-            session['step'] = 'generate_banner'
-            return await self._generate_banner(session)
-        
-        if not params.get('brand'):
-            session['missing_param'] = 'brand'
-            return "🎨 I'll create a banner for you! What's your **brand name**? (Keep it short - 2-3 words work best!)"
-        
-        elif not params.get('message'):
-            session['missing_param'] = 'message'
-            return f"✅ Brand: {params['brand']}\n\nWhat's the **main message** for your banner? (Keep it concise - under 8 words!)"
-        
-        elif not params.get('cta'):
-            session['missing_param'] = 'cta'
-            return f"✅ Great! Message: {params['message']}\n\nWhat **call-to-action** should I use? (Simple 1-3 words like 'Shop Now')"
-        
-        else:
-            # We have all parameters, proceed to generation
-            session['step'] = 'generate_banner'
-            return await self._generate_banner(session)
+    # Skip validation if no text expected
+    if not brand_name and not message and not cta:
+        return json.dumps({
+            "passed": True,
+            "scores": {},
+            "issues": [],
+            "recommendations": [],
+            "feedback": "No text validation needed for text-free banner"
+        })
     
-    async def _handle_collect_video_details(self, session: Dict) -> str:
-        """Collect missing video details"""
-        params = session['params']
+    try:
+        # Read the image file
+        with open(filepath, 'rb') as f:
+            image_data = f.read()
         
-        if not params.get('brand'):
-            session['missing_param'] = 'brand'
-            return "🎬 I'll create a video for you! What's your **brand name**?"
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
         
-        elif not params.get('description'):
-            session['missing_param'] = 'description'
-            return f"✅ Brand: {params['brand']}\n\nPlease **describe the video**. What should happen visually? (Camera movements, actions, lighting)"
+        # Use Anthropic API to validate the image
+        from anthropic import Anthropic
         
-        else:
-            # We have all parameters, proceed to generation
-            session['step'] = 'generate_video'
-            return await self._generate_video(session)
-    
-    async def _generate_banner(self, session: Dict) -> str:
-        """Generate banner with collected parameters"""
-        try:
-            params = session['params']
-            
-            # Use collected parameters or defaults
-            campaign = params.get('campaign', 'Marketing Campaign')
-            brand = params.get('brand', 'Brand')
-            banner_type = params.get('banner_type', 'social')
-            message = params.get('message', 'Special Offer')
-            cta = params.get('cta', 'Learn More')
-            
-            # Check if no text requested
-            if not brand and not message and not cta:
-                brand = ''
-                message = ''
-                cta = ''
-            
-            # Extract weather from context
-            weather_data = self._extract_weather_context(session['context'])
-            
-            # Get reference image
-            reference_image = session.get('attached_image', '')
-            
-            result_json = await generate_banner(
-                campaign_name=campaign,
-                brand_name=brand,
-                banner_type=banner_type,
-                message=message,
-                cta=cta,
-                reference_image_path=reference_image,
-                weather_data=weather_data
-            )
-            
-            result = json.loads(result_json)
-            
-            if "error" in result:
-                session['step'] = 'start'
-                return f"❌ Error creating banner: {result['error']}\n\nLet's try again. What would you like to create?"
-            
-            # Validate the banner only if text present
-            if brand or message or cta:
-                validation_json = await validate_banner(
-                    filepath=result['filepath'],
-                    campaign_name=campaign,
-                    brand_name=brand,
-                    message=message,
-                    cta=cta
-                )
-                validation = json.loads(validation_json)
-            else:
-                validation = {'passed': True, 'scores': {}}
-            
-            # Reset for next conversation
-            session['step'] = 'start'
-            session['params'] = {}
-            session['missing_param'] = None
-            session['attached_image'] = None
-            
-            if validation.get('passed', False):
-                scores = validation.get('scores', {})
-                return f"""✅ Banner created successfully!
-
-📋 Details:
-• Brand: {brand if brand else 'None'}
-• Message: {message if message else 'None'} 
-• CTA: {cta if cta else 'None'}
-• Type: {banner_type}
-
-📊 Validation PASSED!
-• Brand: {scores.get('brand_visibility', 0)}/10
-• Message: {scores.get('message_clarity', 0)}/10
-• CTA: {scores.get('cta_effectiveness', 0)}/10
-
-🎯 Your banner is ready: {result['filename']}
-📥 Download: /files/{result['filename']}
-
-What would you like to create next?"""
-            else:
-                return f"""⚠️ Banner created but needs improvement
-
-📁 File: {result['filename']}
-❌ Issues: {', '.join(validation.get('issues', []))}
-
-What would you like to create next?"""
-                    
-        except Exception as e:
-            session['step'] = 'start'
-            return f"❌ Error: {str(e)}\n\nLet's try again. What would you like to create?"
-    
-    async def _generate_video(self, session: Dict) -> str:
-        """Generate video with collected parameters"""
-        try:
-            params = session['params']
-            
-            campaign = params.get('campaign', 'Video Campaign')
-            brand = params.get('brand', 'Brand')
-            video_type = params.get('video_type', 'standard')
-            description = params.get('description', 'Cinematic product showcase')
-            
-            result_json = await generate_video(
-                campaign_name=campaign,
-                brand_name=brand,
-                video_type=video_type,
-                description=description,
-                resolution='720p',
-                aspect_ratio='16:9',
-                model='veo'
-            )
-            
-            result = json.loads(result_json)
-            
-            session['step'] = 'start'
-            session['params'] = {}
-            session['missing_param'] = None
-            
-            if "error" in result:
-                return f"❌ Error creating video: {result['error']}\n\nLet's try again. What would you like to create?"
-            
-            duration = self._get_video_duration(video_type)
-            return f"""✅ Video created successfully!
-
-📋 Details:
-• Brand: {brand}
-• Duration: {duration} seconds
-• Description: {description}
-
-⏳ Generation complete!
-🎯 Your video is ready: {result['filename']}
-📥 Download: /files/{result['filename']}
-
-What would you like to create next?"""
-                
-        except Exception as e:
-            session['step'] = 'start'
-            return f"❌ Error: {str(e)}\n\nLet's try again. What would you like to create?"
-    
-    async def _generate_image_to_video(self, session: Dict) -> str:
-        """Generate video from existing image"""
-        try:
-            if not session['image_path']:
-                return "I need an image to animate. Please specify a filename like 'banner_social_123.png'"
-            
-            description = session['params'].get('description', 'Cinematic slow zoom with dynamic lighting effects')
-            
-            result_json = await generate_video(
-                campaign_name="Banner Animation",
-                brand_name="Brand",
-                video_type='standard',
-                description=description,
-                resolution='720p',
-                aspect_ratio='16:9',
-                input_image_path=session['image_path'],
-                model='veo'
-            )
-            
-            result = json.loads(result_json)
-            
-            session['step'] = 'start'
-            session['params'] = {}
-            session['missing_param'] = None
-            session['image_filename'] = None
-            session['image_path'] = None
-            
-            if "error" in result:
-                return f"❌ Error creating video: {result['error']}\n\nLet's try again. What would you like to create?"
-            
-            return f"""✅ Animated your image into a video!
-
-🎬 Motion: {description}
-📁 Generated: {result['filename']}
-📥 Download: /files/{result['filename']}
-
-What would you like to create next?"""
-                
-        except Exception as e:
-            session['step'] = 'start'
-            return f"❌ Error: {str(e)}\n\nLet's try again. What would you like to create?"
-    
-    def _determine_content_type_from_context(self, context: List[Dict]) -> str:
-        """Determine content type from conversation context"""
-        all_text = " ".join([msg['content'] for msg in context if msg['role'] == 'user']).lower()
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        if not anthropic_key:
+            return json.dumps({
+                "error": "ANTHROPIC_API_KEY environment variable not set"
+            })
         
-        if 'banner' in all_text:
-            return 'banner'
+        client = Anthropic(api_key=anthropic_key)
         
-        if any(indicator in all_text for indicator in ['animate', 'turn into video', 'make video from', 'convert to video']):
-            return 'image_to_video'
-        
-        banner_score = sum(1 for indicator in ['poster', 'static'] if indicator in all_text)
-        video_score = sum(1 for indicator in ['video', 'clip', 'motion', 'camera'] if indicator in all_text)
-        
-        if banner_score > video_score:
-            return 'banner'
-        elif video_score > banner_score:
-            return 'video'
-        else:
-            return 'ambiguous'
-    
-    def _has_sufficient_banner_params(self, params: Dict) -> bool:
-        """Check if we have enough parameters to generate a banner"""
-        return all(key in params and params[key] for key in ['brand', 'message', 'cta'])
-    
-    def _has_sufficient_video_params(self, params: Dict) -> bool:
-        """Check if we have enough parameters to generate a video"""
-        return 'brand' in params and params['brand'] and 'description' in params and params['description']
-    
-    def _extract_attached_image(self, user_input: str) -> Optional[str]:
-        """Extract attached image path from user input"""
-        match = re.search(r'\[ATTACHED_IMAGE:\s*(.+?)\]', user_input)
-        return match.group(1) if match else None
-    
-    def _extract_weather_context(self, context: List[Dict]) -> Optional[Dict]:
-        """Extract weather conditions from conversation"""
-        all_text = " ".join([msg['content'] for msg in context if msg['role'] == 'user']).lower()
-        
-        # Check if user wants live weather API
-        if 'weather api' in all_text or 'current weather' in all_text or 'actual weather' in all_text:
-            # Extract location
-            import re
-            location_match = re.search(r'(?:in|for|at)\s+([A-Za-z\s]+?)(?:\s|$|,|\.)', all_text, re.IGNORECASE)
-            if location_match:
-                location = location_match.group(1).strip()
-                return self._fetch_weather_api(location)
-        
-        # Manual weather keywords
-        if 'rain' in all_text or 'rainy' in all_text:
-            return {'condition': 'rain', 'description': 'rainy weather'}
-        elif 'snow' in all_text or 'snowy' in all_text:
-            return {'condition': 'snow', 'description': 'snowy weather'}
-        elif 'storm' in all_text or 'stormy' in all_text:
-            return {'condition': 'storm', 'description': 'stormy weather'}
-        elif 'sunny' in all_text or 'sun' in all_text:
-            return {'condition': 'clear', 'description': 'sunny weather'}
-        elif 'cloud' in all_text or 'cloudy' in all_text:
-            return {'condition': 'cloudy', 'description': 'cloudy weather'}
-        elif 'fog' in all_text or 'foggy' in all_text:
-            return {'condition': 'fog', 'description': 'foggy weather'}
-        
-        return None
-    
-    def _fetch_weather_api(self, location: str) -> Optional[Dict]:
-        """Fetch weather from OpenWeather API"""
-        try:
-            import requests
-            api_key = os.getenv("OPENWEATHER_API_KEY")
-            if not api_key:
-                print("⚠️  OPENWEATHER_API_KEY not set, using manual weather")
-                return None
-            
-            url = f"http://api.openweathermap.org/data/2.5/weather?q={location}&appid={api_key}&units=metric"
-            response = requests.get(url, timeout=5)
-            
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    'condition': data['weather'][0]['main'].lower(),
-                    'description': data['weather'][0]['description'],
-                    'temperature': data['main']['temp']
+        validation_prompt = f"""You are an expert banner advertisement validator. Analyze this banner image and validate it against professional standards.
+
+EXPECTED CONTENT:
+- Campaign: {campaign_name}
+- Brand: {brand_name}
+- Main Message: {message}
+- Call-to-Action: {cta}
+
+VALIDATION CRITERIA:
+
+1. BRAND VISIBILITY (1-10): Is there a clear brand name visible and prominent? 
+   - IMPORTANT: The text doesn't need to be exactly "{brand_name}" - similar text, recognizable brand elements, or close matches are acceptable
+   - Focus on: Is there prominent branding? Is it readable? Is it well-positioned?
+
+2. MESSAGE CLARITY (1-10): Is there a clear main message that's readable?
+   - IMPORTANT: The message doesn't need to match "{message}" word-for-word
+   - Focus on: Is there a clear value proposition? Is the text legible? Does it communicate the offer?
+
+3. CTA EFFECTIVENESS (1-10): Is there a clear call-to-action?
+   - IMPORTANT: The CTA doesn't need to say exactly "{cta}" - similar action words work
+   - Focus on: Is there a prominent button/CTA? Is it actionable? Does it stand out?
+
+4. VISUAL APPEAL (1-10): Is the design eye-catching, modern, and professional?
+   - Focus on: Color scheme, layout, visual hierarchy, professional appearance
+
+5. OVERALL QUALITY (1-10): Overall professional quality for advertising
+   - Focus on: Suitable for digital advertising? High quality? Professional appearance?
+
+TEXT ACCURACY GUIDELINES:
+- Be LENIENT with text matching - AI-generated images often have imperfect text
+- If the brand name is close or recognizable, score it high
+- If the message conveys the right idea even with different words, score it high  
+- If there's a clear CTA button/text with action words, score it high
+- Deduct points only for: completely illegible text, gibberish, or missing elements
+
+SCORING GUIDELINES:
+- 9-10: Excellent, professional quality
+- 7-8: Good, acceptable for advertising (THIS IS THE PASS THRESHOLD)
+- 5-6: Fair, but has issues
+- 1-4: Poor, needs significant improvement
+
+Provide your assessment in this exact JSON format:
+{{
+    "passed": true/false,
+    "scores": {{
+        "brand_visibility": X,
+        "message_clarity": X,
+        "cta_effectiveness": X,
+        "visual_appeal": X,
+        "overall_quality": X
+    }},
+    "issues": ["list of specific issues found"],
+    "recommendations": ["list of improvements if failed"],
+    "feedback": "detailed feedback message"
+}}
+
+PASS if all scores >= 7 and banner has clear branding, message, and CTA.
+FAIL if any score < 7 or critical elements are missing/illegible.
+
+Be reasonable and practical - focus on whether this banner would work for advertising, not whether text matches perfectly."""
+
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": image_base64
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": validation_prompt
+                        }
+                    ]
                 }
-        except Exception as e:
-            print(f"⚠️  Weather API error: {e}")
+            ]
+        )
         
-        return None
-    
-    def _detect_image_filename(self, user_input: str) -> Tuple[Optional[str], Optional[str]]:
-        """Detect image filenames in user input for image-to-video"""
-        patterns = [
-            r'(\b\w+\.png\b)',
-            r'(\b\w+\.jpg\b)',
-            r'(\b\w+\.jpeg\b)',
-        ]
+        # Extract the JSON response
+        validation_text = response.content[0].text
         
-        for pattern in patterns:
-            match = re.search(pattern, user_input, re.IGNORECASE)
-            if match:
-                filename = match.group(1)
-                filepath = os.path.join("outputs", filename)
-                return filename, filepath
-        
-        return None, None
-    
-    def _get_video_duration(self, video_type: str) -> int:
-        """Get duration in seconds for video type"""
-        durations = {"short": 4, "standard": 6, "extended": 8}
-        return durations.get(video_type, 6)
+        # Try to extract JSON from the response
+        import re
+        json_match = re.search(r'\{.*\}', validation_text, re.DOTALL)
+        if json_match:
+            validation_result = json.loads(json_match.group())
+            return json.dumps(validation_result, indent=2)
+        else:
+            return json.dumps({
+                "passed": False,
+                "scores": {},
+                "issues": ["Could not parse validation response"],
+                "recommendations": ["Please regenerate the banner"],
+                "feedback": validation_text
+            })
+            
+    except Exception as e:
+        return json.dumps({
+            "error": f"Validation error: {str(e)}"
+        })
 
-# Create the orchestrator instance
-orchestrator = MarketingOrchestrator()
-
-async def run_single_prompt(prompt: str, session_id: str = "default") -> str:
-    """Run the agent with a single prompt"""
-    return await orchestrator.process_request(prompt, session_id)
 
 async def main():
-    """Main interactive loop"""
-    print("\n" + "="*80)
-    print("🎨 MARKETING CONTENT GENERATOR")
-    print("="*80)
-    print("🤖 Assistant: Hello! Tell me what you'd like to create.")
-    print("="*80)
-    
-    session_id = "cli_session"
-    
-    while True:
-        try:
-            user_input = input("\n💬 You: ").strip()
-            if user_input.lower() in ['quit', 'exit', 'bye']:
-                break
-                
-            response = await run_single_prompt(user_input, session_id)
-            print(f"\n🤖 Assistant: {response}")
-            
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            print(f"\n❌ Error: {e}")
+    """Run the MCP server"""
+    async with stdio_server() as (read_stream, write_stream):
+        await app.run(
+            read_stream,
+            write_stream,
+            app.create_initialization_options()
+        )
+
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
