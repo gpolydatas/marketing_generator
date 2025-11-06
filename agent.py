@@ -237,6 +237,10 @@ Please tell me which you'd like!"""
         """Collect missing banner details"""
         params = session['params']
         
+        # Get banner type for confirmation message
+        banner_type = params.get('banner_type', 'social')
+        banner_type_display = self._get_banner_type_display_name(banner_type)
+        
         # Check if user wants no text
         all_text = " ".join([msg['content'] for msg in session['context'] if msg['role'] == 'user']).lower()
         no_text_requested = any(phrase in all_text for phrase in ['no text', 'no brand', 'no message', 'no cta', 'without text'])
@@ -251,15 +255,15 @@ Please tell me which you'd like!"""
         
         if not params.get('brand'):
             session['missing_param'] = 'brand'
-            return "🎨 I'll create a banner for you! What's your **brand name**? (Keep it short - 2-3 words work best!)"
+            return f"🎨 I'll create a {banner_type_display} banner for you! What's your **brand name**? (Keep it short - 2-3 words work best!)"
         
         elif not params.get('message'):
             session['missing_param'] = 'message'
-            return f"✅ Brand: {params['brand']}\n\nWhat's the **main message** for your banner? (Keep it concise - under 8 words!)"
+            return f"✅ {banner_type_display} Banner | Brand: {params['brand']}\n\nWhat's the **main message** for your banner? (Keep it concise - under 8 words!)"
         
         elif not params.get('cta'):
             session['missing_param'] = 'cta'
-            return f"✅ Great! Message: {params['message']}\n\nWhat **call-to-action** should I use? (Simple 1-3 words like 'Shop Now')"
+            return f"✅ {banner_type_display} Banner | Brand: {params['brand']} | Message: {params['message']}\n\nWhat **call-to-action** should I use? (Simple 1-3 words like 'Shop Now')"
         
         else:
             # We have all parameters, proceed to generation
@@ -291,9 +295,12 @@ Please tell me which you'd like!"""
             # Use collected parameters or defaults
             campaign = params.get('campaign', 'Marketing Campaign')
             brand = params.get('brand', 'Brand')
-            banner_type = params.get('banner_type', 'social')  # FIX: Extract banner_type from params
+            banner_type = params.get('banner_type', 'social')
             message = params.get('message', 'Special Offer')
             cta = params.get('cta', 'Learn More')
+            
+            # Get banner type display name
+            banner_type_display = self._get_banner_type_display_name(banner_type)
             
             # Check if no text requested
             if not brand and not message and not cta:
@@ -310,7 +317,7 @@ Please tell me which you'd like!"""
             result_json = await generate_banner(
                 campaign_name=campaign,
                 brand_name=brand,
-                banner_type=banner_type,  # FIX: Use the extracted banner_type
+                banner_type=banner_type,
                 message=message,
                 cta=cta,
                 reference_image_path=reference_image,
@@ -344,13 +351,13 @@ Please tell me which you'd like!"""
             
             if validation.get('passed', False):
                 scores = validation.get('scores', {})
-                return f"""✅ Banner created successfully!
+                return f"""✅ {banner_type_display} banner created successfully!
 
 📋 Details:
 • Brand: {brand if brand else 'None'}
 • Message: {message if message else 'None'} 
 • CTA: {cta if cta else 'None'}
-• Type: {banner_type}
+• Type: {banner_type_display}
 
 📊 Validation PASSED!
 • Brand: {scores.get('brand_visibility', 0)}/10
@@ -362,7 +369,7 @@ Please tell me which you'd like!"""
 
 What would you like to create next?"""
             else:
-                return f"""⚠️ Banner created but needs improvement
+                return f"""⚠️ {banner_type_display} banner created but needs improvement
 
 📁 File: {result['filename']}
 ❌ Issues: {', '.join(validation.get('issues', []))}
@@ -574,6 +581,19 @@ What would you like to create next?"""
         """Get duration in seconds for video type"""
         durations = {"short": 4, "standard": 6, "extended": 8}
         return durations.get(video_type, 6)
+    
+    def _get_banner_type_display_name(self, banner_type: str) -> str:
+        """Get user-friendly display name for banner type"""
+        display_names = {
+            'social': 'Social Media',
+            'leaderboard': 'Leaderboard',
+            'square': 'Square',
+            'digital_6_sheet': 'Digital 6-Sheet',
+            'mpu': 'MPU (Medium Rectangle)',
+            'mobile_banner_small': 'Small Mobile Banner',
+            'mobile_banner_standard': 'Standard Mobile Banner'
+        }
+        return display_names.get(banner_type, banner_type.title())
 
 # Create the orchestrator instance
 orchestrator = MarketingOrchestrator()
