@@ -434,6 +434,22 @@ async def health_check():
         "outputs_writable": os.access(OUTPUTS_DIR, os.W_OK)
     }
 
+# Banner types info endpoint
+@app.get("/banner-types")
+async def get_banner_types():
+    """Get information about available banner types and their dimensions"""
+    return {
+        "banner_types": {
+            "social": {"width": 1200, "height": 628, "description": "Social media posts"},
+            "leaderboard": {"width": 728, "height": 90, "description": "Website header banner"},
+            "square": {"width": 1024, "height": 1024, "description": "Square format"},
+            "digital_6_sheet": {"width": 1080, "height": 1920, "description": "Vertical mobile format"},
+            "mpu": {"width": 300, "height": 250, "description": "Medium Rectangle ad unit"},
+            "mobile_banner_small": {"width": 300, "height": 50, "description": "Small mobile banner"},
+            "mobile_banner_standard": {"width": 320, "height": 50, "description": "Standard mobile banner"}
+        }
+    }
+
 if __name__ == "__main__":
     import uvicorn
     
