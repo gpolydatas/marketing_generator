@@ -323,23 +323,25 @@ Make the text perfect - that's the priority."""
                 print("  None")
             print(f"\n☁️  WEATHER SCENE DESCRIPTION:\n{weather_scene if weather_scene else 'None'}\n")
             
-            # Build final prompt
-            final_prompt = f"""Professional banner ad inspired by: {style_desc}
+            # Build final prompt - KEEP IT SHORT for DALL-E stability
+            if brand_name or message or cta:
+                final_prompt = f"""{style_desc[:150]}
 
-WEATHER TO SHOW: {weather_scene if weather_scene else "normal conditions"}
+{weather_scene[:100] if weather_scene else ""}
 
-TEXT (EXACT):
-Brand: "{brand_name}" (LARGE BOLD)
-Message: "{message}"
-CTA: "{cta}" (button)
+Text: "{brand_name}" "{message}" "{cta}"
+{width}x{height}px"""
+            else:
+                # No text version - even shorter
+                final_prompt = f"""{style_desc[:200]}
 
-Style: {font_family}, colors {primary_color}/{secondary_color}
-Size: {width}x{height}px
-Text must be crystal clear"""
+{weather_scene[:120] if weather_scene else "Professional setting"}
 
-            # Trim if needed
-            if len(final_prompt) > 4000:
-                final_prompt = final_prompt[:4000]
+{width}x{height}px, no text"""
+
+            # Ensure under 400 chars to avoid DALL-E errors
+            if len(final_prompt) > 400:
+                final_prompt = final_prompt[:400]
             
             print(f"\n📝 PROMPT TO DALL-E ({len(final_prompt)} chars):\n{'-'*60}\n{final_prompt}\n{'-'*60}\n")
             
