@@ -18,6 +18,10 @@ BANNER_SPECS = {
     "leaderboard": {"width": 728, "height": 90},
     "social": {"width": 1200, "height": 628},
     "square": {"width": 1024, "height": 1024},
+    "digital_6_sheet": {"width": 1080, "height": 1920},
+    "mpu": {"width": 300, "height": 250},
+    "mobile_banner_small": {"width": 300, "height": 50},
+    "mobile_banner_standard": {"width": 320, "height": 50},
 }
 
 # Create MCP server
@@ -44,7 +48,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "banner_type": {
                         "type": "string",
-                        "enum": ["leaderboard", "social", "square"],
+                        "enum": ["leaderboard", "social", "square", "digital_6_sheet", "mpu", "mobile_banner_small", "mobile_banner_standard"],
                         "description": "Type of banner"
                     },
                     "message": {
@@ -341,16 +345,21 @@ Make the text perfect - that's the priority."""
     # Initialize OpenAI client
     client = OpenAI(api_key=api_key)
     
-    # Determine DALL-E size
     width = specs['width']
     height = specs['height']
-    
+
     if width == height:
         size = "1024x1024"
     elif width > height:
-        size = "1792x1024"
+        if width == 1792 and height == 1024:  # Keep existing social banner size
+            size = "1792x1024"
+        else:
+            size = "1792x1024"  # Default landscape
     else:
-        size = "1024x1792"
+        if width == 1024 and height == 1792:  # Keep existing portrait size
+            size = "1024x1792"
+        else:
+            size = "1024x1792"  # Default portrait# Determine DALL-E size
     
     try:
         # When reference image provided, analyze with Vision then generate
