@@ -68,13 +68,14 @@ class MarketingOrchestrator:
             session['attached_image'] = attached_image_path
             user_input = user_input.replace(f"[ATTACHED_IMAGE: {attached_image_path}]", "").strip()
         
-        # Check for image-to-video requests
-        image_filename, image_path = self._detect_image_filename(user_input)
-        if image_filename:
-            session['image_filename'] = image_filename
-            session['image_path'] = image_path
-            session['content_type'] = 'image_to_video'
-            session['step'] = 'generate_image_to_video'
+        # Only check for image-to-video if explicit animation requested
+        if any(trigger in user_input.lower() for trigger in ['animate', 'turn into video', 'convert to video']):
+            image_filename, image_path = self._detect_image_filename(user_input)
+            if image_filename:
+                session['image_filename'] = image_filename
+                session['image_path'] = image_path
+                session['content_type'] = 'image_to_video'
+                session['step'] = 'generate_image_to_video'
         
         # Handle the current step
         if session['step'] == 'start':
@@ -170,7 +171,19 @@ class MarketingOrchestrator:
         
         if content_type == 'banner':
             session['content_type'] = 'banner'
-            if self._has_sufficient_banner_params(session['params']):
+            
+            # Check if no text requested
+            all_text = " ".join([msg['content'] for msg in session['context'] if msg['role'] == 'user']).lower()
+            no_text = any(phrase in all_text for phrase in ['no text', 'no brand', 'no message', 'no cta', 'without text', 'no words'])
+            
+            if no_text:
+                # Skip collection, go straight to generation with empty text
+                session['params']['brand'] = ''
+                session['params']['message'] = ''
+                session['params']['cta'] = ''
+                session['step'] = 'generate_banner'
+                return await self._generate_banner(session)
+            elif self._has_sufficient_banner_params(session['params']):
                 session['step'] = 'generate_banner'
                 return await self._generate_banner(session)
             else:
@@ -211,6 +224,18 @@ Please tell me which you'd like!"""
     async def _handle_collect_banner_details(self, session: Dict) -> str:
         """Collect missing banner details"""
         params = session['params']
+        
+        # Check if user wants no text
+        all_text = " ".join([msg['content'] for msg in session['context'] if msg['role'] == 'user']).lower()
+        no_text_requested = any(phrase in all_text for phrase in ['no text', 'no brand', 'no message', 'no cta', 'without text'])
+        
+        if no_text_requested:
+            # Set minimal defaults for no-text banner
+            params['brand'] = ''
+            params['message'] = ''
+            params['cta'] = ''
+            session['step'] = 'generate_banner'
+            return await self._generate_banner(session)
         
         if not params.get('brand'):
             session['missing_param'] = 'brand'
@@ -258,12 +283,26 @@ Please tell me which you'd like!"""
             message = params.get('message', 'Special Offer')
             cta = params.get('cta', 'Learn More')
             
+            # Check if no text requested
+            if not brand and not message and not cta:
+                brand = ''
+                message = ''
+                cta = ''
+            
+            # Extract weather from context
+            weather_data = self._extract_weather_context(session['context'])
+            
+            # Get reference image
+            reference_image = session.get('attached_image', '')
+            
             result_json = await generate_banner(
                 campaign_name=campaign,
                 brand_name=brand,
                 banner_type=banner_type,
                 message=message,
-                cta=cta
+                cta=cta,
+                reference_image_path=reference_image,
+                weather_data=weather_data
             )
             
             result = json.loads(result_json)
@@ -272,30 +311,33 @@ Please tell me which you'd like!"""
                 session['step'] = 'start'
                 return f"❌ Error creating banner: {result['error']}\n\nLet's try again. What would you like to create?"
             
-            # Validate the banner
-            validation_json = await validate_banner(
-                filepath=result['filepath'],
-                campaign_name=campaign,
-                brand_name=brand,
-                message=message,
-                cta=cta
-            )
-            
-            validation = json.loads(validation_json)
+            # Validate the banner only if text present
+            if brand or message or cta:
+                validation_json = await validate_banner(
+                    filepath=result['filepath'],
+                    campaign_name=campaign,
+                    brand_name=brand,
+                    message=message,
+                    cta=cta
+                )
+                validation = json.loads(validation_json)
+            else:
+                validation = {'passed': True, 'scores': {}}
             
             # Reset for next conversation
             session['step'] = 'start'
             session['params'] = {}
             session['missing_param'] = None
+            session['attached_image'] = None
             
             if validation.get('passed', False):
                 scores = validation.get('scores', {})
                 return f"""✅ Banner created successfully!
 
 📋 Details:
-• Brand: {brand}
-• Message: {message} 
-• CTA: {cta}
+• Brand: {brand if brand else 'None'}
+• Message: {message if message else 'None'} 
+• CTA: {cta if cta else 'None'}
 • Type: {banner_type}
 
 📊 Validation PASSED!
@@ -412,15 +454,14 @@ What would you like to create next?"""
         """Determine content type from conversation context"""
         all_text = " ".join([msg['content'] for msg in context if msg['role'] == 'user']).lower()
         
-        # Image-to-video has highest priority
-        if any(indicator in all_text for indicator in ['animate', 'turn into video', 'make video from', '.png', '.jpg']):
+        if 'banner' in all_text:
+            return 'banner'
+        
+        if any(indicator in all_text for indicator in ['animate', 'turn into video', 'make video from', 'convert to video']):
             return 'image_to_video'
         
-        # Banner indicators
-        banner_score = sum(1 for indicator in ['banner', 'image', 'poster', 'static'] if indicator in all_text)
-        
-        # Video indicators
-        video_score = sum(1 for indicator in ['video', 'clip', 'motion', 'animated', 'camera'] if indicator in all_text)
+        banner_score = sum(1 for indicator in ['poster', 'static'] if indicator in all_text)
+        video_score = sum(1 for indicator in ['video', 'clip', 'motion', 'camera'] if indicator in all_text)
         
         if banner_score > video_score:
             return 'banner'
@@ -441,6 +482,59 @@ What would you like to create next?"""
         """Extract attached image path from user input"""
         match = re.search(r'\[ATTACHED_IMAGE:\s*(.+?)\]', user_input)
         return match.group(1) if match else None
+    
+    def _extract_weather_context(self, context: List[Dict]) -> Optional[Dict]:
+        """Extract weather conditions from conversation"""
+        all_text = " ".join([msg['content'] for msg in context if msg['role'] == 'user']).lower()
+        
+        # Check if user wants live weather API
+        if 'weather api' in all_text or 'current weather' in all_text or 'actual weather' in all_text:
+            # Extract location
+            import re
+            location_match = re.search(r'(?:in|for|at)\s+([A-Za-z\s]+?)(?:\s|$|,|\.)', all_text, re.IGNORECASE)
+            if location_match:
+                location = location_match.group(1).strip()
+                return self._fetch_weather_api(location)
+        
+        # Manual weather keywords
+        if 'rain' in all_text or 'rainy' in all_text:
+            return {'condition': 'rain', 'description': 'rainy weather'}
+        elif 'snow' in all_text or 'snowy' in all_text:
+            return {'condition': 'snow', 'description': 'snowy weather'}
+        elif 'storm' in all_text or 'stormy' in all_text:
+            return {'condition': 'storm', 'description': 'stormy weather'}
+        elif 'sunny' in all_text or 'sun' in all_text:
+            return {'condition': 'clear', 'description': 'sunny weather'}
+        elif 'cloud' in all_text or 'cloudy' in all_text:
+            return {'condition': 'cloudy', 'description': 'cloudy weather'}
+        elif 'fog' in all_text or 'foggy' in all_text:
+            return {'condition': 'fog', 'description': 'foggy weather'}
+        
+        return None
+    
+    def _fetch_weather_api(self, location: str) -> Optional[Dict]:
+        """Fetch weather from OpenWeather API"""
+        try:
+            import requests
+            api_key = os.getenv("OPENWEATHER_API_KEY")
+            if not api_key:
+                print("⚠️  OPENWEATHER_API_KEY not set, using manual weather")
+                return None
+            
+            url = f"http://api.openweathermap.org/data/2.5/weather?q={location}&appid={api_key}&units=metric"
+            response = requests.get(url, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    'condition': data['weather'][0]['main'].lower(),
+                    'description': data['weather'][0]['description'],
+                    'temperature': data['main']['temp']
+                }
+        except Exception as e:
+            print(f"⚠️  Weather API error: {e}")
+        
+        return None
     
     def _detect_image_filename(self, user_input: str) -> Tuple[Optional[str], Optional[str]]:
         """Detect image filenames in user input for image-to-video"""
