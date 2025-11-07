@@ -165,8 +165,15 @@ async def generate_banner(
             "error": "OPENAI_API_KEY environment variable not set"
         })
     
-    # Check if this is a no-text banner - CRITICAL FIX
-    no_text = (not brand_name and not message and not cta) or "NO TEXT" in additional_instructions.upper()
+    # Check if this is a no-text banner
+    # TRUE no-text: explicitly requested OR (no brand/message/cta AND no scene description)
+    # Scene-only: has additional_instructions with scene but no brand/message/cta
+    has_scene_description = additional_instructions and len(additional_instructions.strip()) > 10 and "NO TEXT" not in additional_instructions.upper()
+    
+    no_text = (
+        "NO TEXT" in additional_instructions.upper() or
+        (not brand_name and not message and not cta and not has_scene_description)
+    )
     
     # If no_text is detected, force empty strings
     if no_text:
@@ -174,6 +181,11 @@ async def generate_banner(
         message = ""
         cta = ""
         print("🚫 NO-TEXT MODE: Forcing empty text fields")
+    
+    # Scene-only mode: has scene but no marketing text
+    scene_only = has_scene_description and not brand_name and not message and not cta
+    if scene_only:
+        print("🎬 SCENE-ONLY MODE: Generating visual scene without marketing text")
     
     # Build weather scene description
     weather_scene = ""
@@ -212,13 +224,25 @@ async def generate_banner(
         use_variation = True
         reference_image_context = f" (using {os.path.basename(reference_image_path)} as base)"
         
-        if no_text:
-            # SHORT PROMPT for edit mode - NO TEXT VERSION
-            prompt = f"""Create a visual composition based on this image.
+        if no_text and not scene_only:
+            # TRUE NO-TEXT MODE: abstract art, no scene, no text
+            if weather_scene:
+                # Weather + no text + reference image: adapt atmosphere while keeping visual style
+                prompt = f"""KEEP the exact visual style, composition, shapes, and design from this image.
+
+Adapt ONLY the atmosphere and mood to reflect: {weather_scene}
+
+Rules:
+- PRESERVE the original visual elements, shapes, patterns, and style
+- ADAPT colors and lighting to match the weather atmosphere
+- NO text, words, letters, or written content of any kind
+- Maintain the abstract/artistic style if present
+- Keep the same visual complexity and composition"""
+            else:
+                # No weather + no text: just remove text
+                prompt = f"""Create a visual composition based on this image.
 
 Remove all text elements completely.
-
-{weather_scene if weather_scene else ""}
 
 Create a clean visual design with:
 - No text, words, or letters of any kind
@@ -233,30 +257,97 @@ Technical requirements:
             
             if additional_instructions:
                 prompt += f"\n\n{additional_instructions}"
+        
+        elif scene_only:
+            # SCENE-ONLY MODE: transform image to show the scene, but no marketing text
+            prompt = f"""COMPLETELY RECREATE this scene using the subject from the reference image:
+
+SCENE REQUIREMENTS:
+{additional_instructions}
+
+{f"WEATHER: {weather_scene}" if weather_scene else ""}
+
+CRITICAL INSTRUCTIONS:
+- Take the EXACT subject/object/person from the reference image
+- Place it in the NEW scene described above
+- The subject must be the main focus in the scene
+- Create a photorealistic environment matching the scene description
+- Change EVERYTHING except the main subject itself
+- NO studio background - create the actual scene environment
+- NO text, branding, or marketing elements
+- Professional photography style
+
+The final image must show THIS SPECIFIC SUBJECT in the DESCRIBED SCENE."""
+        
         else:
-            # SHORT PROMPT for edit mode - WITH TEXT
-            prompt = f"""Modify this image to show different weather conditions while adding text.
+            # MARKETING BANNER MODE: scene + advertising text
+            if additional_instructions and len(additional_instructions.strip()) > 10:
+                # Has scene description
+                prompt = f"""RECREATE this scene using the subject from the reference image:
 
-{weather_scene if weather_scene else "Keep the current weather/atmosphere."}
+SCENE: {additional_instructions}
 
-Add advertising text:
-Brand: "{brand_name}" (large, bold)
-Message: "{message}" (clear)
-CTA: "{cta}" (on button)
+{f"WEATHER: {weather_scene}" if weather_scene else ""}
+
+Then add this advertising text:
+Brand: "{brand_name}" (large, bold, top of banner)
+Message: "{message}" (center, clear and readable)
+CTA: "{cta}" (button at bottom)
+
+REQUIREMENTS:
+- Use the EXACT subject/object from the reference image
+- Place it in the scene described above
+- Professional advertising photography
+- Text must be prominent and legible
+- Font style: {font_family}
+- Colors: Primary {primary_color}, Secondary {secondary_color}"""
+            else:
+                # No scene, just add text to existing image
+                prompt = f"""Add professional advertising text to this image:
+
+Brand: "{brand_name}" (large, bold, top)
+Message: "{message}" (center, clear)
+CTA: "{cta}" (button, bottom)
 
 Style:
 - Font: {font_family}
 - Colors: {primary_color}, {secondary_color}
 - Professional banner ad
-- Text must be exact and legible"""
-            
-            if additional_instructions:
-                prompt += f"\n\nNotes: {additional_instructions}"
+- Text must be exact and legible
+
+{f"Adapt atmosphere for: {weather_scene}" if weather_scene else ""}"""
     else:
         if no_text:
             # FULL PROMPT for generation mode - NO TEXT VERSION
-            # Use a completely different approach - focus on pure visual design
-            prompt = f"""Create a high-quality visual composition for digital display.
+            if weather_scene:
+                # Weather-focused visual design
+                prompt = f"""Create a high-quality visual composition that captures the essence of {weather_scene}.
+
+PRIMARY FOCUS - WEATHER ATMOSPHERE:
+{weather_scene}
+
+Create an abstract or artistic visual that strongly conveys this weather through:
+- Color palette matching the weather (grey/blue for rain, white for snow, warm for sun, dark for storms)
+- Visual elements suggesting the weather (droplets, snowflakes, clouds, sun rays, fog effects)
+- Mood and atmosphere appropriate to the conditions
+- Dynamic composition that feels weather-appropriate
+
+TECHNICAL REQUIREMENTS:
+- Dimensions: {specs['width']}x{specs['height']} pixels
+- COMPLETELY TEXT-FREE: No words, letters, or text of any kind
+- No brand names, slogans, or messages
+- No call-to-action elements
+- Pure visual design only
+
+COLOR GUIDANCE:
+- Use weather-appropriate color schemes
+- Primary tone: {primary_color} (adapt to weather)
+- Secondary tone: {secondary_color} (adapt to weather)
+
+This must be 100% text-free visual art that strongly conveys the weather atmosphere."""
+            else:
+                # No weather - generic visual design
+                prompt = f"""Create a high-quality visual composition for digital display.
 
 TECHNICAL REQUIREMENTS:
 - Dimensions: {specs['width']}x{specs['height']} pixels
@@ -287,10 +378,6 @@ This must be 100% text-free visual art for digital display."""
             
             if additional_instructions:
                 prompt += f"\n\n{additional_instructions}"
-                
-            # Add weather context if available
-            if weather_scene:
-                prompt += f"\n\nVisual atmosphere: {weather_scene}"
                 
         else:
             # FULL PROMPT for generation mode - WITH TEXT
@@ -409,12 +496,37 @@ Make the text perfect - that's the priority."""
             
             # Build final prompt - KEEP IT SHORT for DALL-E stability
             if not no_text and (brand_name or message or cta):
+                # Marketing banner with text
                 final_prompt = f"""{style_desc[:150]}
 
 {weather_scene[:100] if weather_scene else ""}
 
 Text: "{brand_name}" "{message}" "{cta}"
 {width}x{height}px"""
+            elif scene_only:
+                # Scene-only mode: check if hyperrealistic/photorealistic photography is requested
+                is_photo_request = any(word in additional_instructions.lower() for word in ['hyperrealistic', 'photorealistic', 'realistic', 'photograph'])
+                
+                if is_photo_request:
+                    # Pure photography prompt - NO banner/marketing language
+                    final_prompt = f"""Professional automotive photography.
+
+Subject: {style_desc[:100]}
+
+{additional_instructions[:180]}
+
+{weather_scene[:80] if weather_scene else ""}
+
+Style: RAW photo, natural lighting, professional camera, ultra detailed, no text, no graphics"""
+                else:
+                    # Standard scene composition
+                    final_prompt = f"""Subject: {style_desc[:120]}
+
+Scene: {additional_instructions[:150]}
+
+{weather_scene[:80] if weather_scene else ""}
+
+{width}x{height}px, photorealistic, no text"""
             else:
                 # No text version - focus on visual description only
                 final_prompt = f"""{style_desc[:180]}
