@@ -54,7 +54,8 @@ TOOLS = [
                 "message": {"type": "string", "description": "Main message (empty string if no text requested)"},
                 "cta": {"type": "string", "description": "Call to action (empty string if no text requested)"},
                 "additional_instructions": {"type": "string", "description": "Scene description and visual requirements. Extract from user request: 'car driving in countryside with sunny conditions', 'rainy atmosphere', 'no text mode', etc. Put the COMPLETE scene description here."},
-                "reference_image_path": {"type": "string", "description": "Path to reference image if user attached one"}
+                "reference_image_path": {"type": "string", "description": "Path to reference image if user attached one"},
+                "model": {"type": "string", "enum": ["imagen4", "imagen4ultra", "dalle3"], "description": "Image generation model. DEFAULT: 'imagen4' (best quality). Use 'dalle3' only if user explicitly asks for DALL-E."}
             },
             "required": ["campaign_name", "banner_type"]
         }
@@ -151,7 +152,8 @@ class Agent:
                                 message=tool_input.get('message', ''),
                                 cta=tool_input.get('cta', ''),
                                 additional_instructions=tool_input.get('additional_instructions', ''),
-                                reference_image_path=tool_input.get('reference_image_path', img_path or '')
+                                reference_image_path=tool_input.get('reference_image_path', img_path or ''),
+                                model=tool_input.get('model', 'imagen4')
                             )
                         elif tool_name == "generate_video":
                             result = await generate_video(
