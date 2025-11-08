@@ -24,18 +24,18 @@ def get_model():
     if os.path.exists(p):
         with open(p) as f:
             c = yaml.safe_load(f)
-        model = c.get('default_model', 'claude-sonnet-4-20250514')
+        model = c.get('default_model', 'claude-sonnet-4-5-20250929')
         
         # Map aliases
         if model == 'sonnet':
-            return 'claude-sonnet-4-20250514'
+            return 'claude-sonnet-4-5-20250929'
         elif model == 'sonnet35':
             return 'claude-3-5-sonnet-20241022'
         elif model == 'haiku':
             return 'claude-3-5-haiku-20241022'
         return model
     
-    return 'claude-sonnet-4-20250514'
+    return 'claude-sonnet-4-5-20250929'
 
 TOOLS = [
     {
@@ -55,6 +55,7 @@ TOOLS = [
                 "cta": {"type": "string", "description": "Call to action (empty string if no text requested)"},
                 "additional_instructions": {"type": "string", "description": "Scene description and visual requirements. Extract from user request: 'car driving in countryside with sunny conditions', 'rainy atmosphere', 'no text mode', etc. Put the COMPLETE scene description here."},
                 "reference_image_path": {"type": "string", "description": "Path to reference image if user attached one"},
+                "weather_location": {"type": "string", "description": "Location for weather API (e.g., 'London', 'New York'). Set this when user says 'use weather API' or 'apply weather conditions'. Default: 'London'"},
                 "model": {"type": "string", "enum": ["imagen4", "imagen4ultra", "dalle3"], "description": "Image generation model. DEFAULT: 'imagen4' (best quality). Use 'dalle3' only if user explicitly asks for DALL-E."}
             },
             "required": ["campaign_name", "banner_type"]
@@ -99,6 +100,7 @@ CRITICAL RULES FOR BANNERS:
 - Put style keywords in additional_instructions: "hyperrealistic", "photorealistic", "artistic", "cinematic"
 - If user says "use image X and create [hyper realistic] image showing Y", put "hyperrealistic Y" in additional_instructions AND set reference_image_path
 - If no text requested, use empty strings for brand_name, message, cta
+- WEATHER API: When user says "use weather API" or "apply weather conditions", set weather_location to a city name (default: "London")
 
 CRITICAL RULES FOR VIDEOS:
 - If user says "use image X to create video", call generate_video with input_image_path
@@ -113,6 +115,31 @@ class Agent:
         self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.model = get_model()
         self.state = {}
+    
+    def _fetch_weather(self, location: str):
+        """Fetch weather data from OpenWeather API"""
+        try:
+            import requests
+            api_key = os.getenv("OPENWEATHER_API_KEY")
+            if not api_key:
+                return None
+            
+            url = f"http://api.openweathermap.org/data/2.5/weather?q={location}&appid={api_key}&units=metric"
+            response = requests.get(url, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    'condition': data['weather'][0]['main'],
+                    'description': data['weather'][0]['description'],
+                    'temperature': data['main']['temp'],
+                    'humidity': data['main']['humidity'],
+                    'location': location
+                }
+        except Exception as e:
+            print(f"Weather API error: {e}")
+        
+        return None
     
     async def process(self, text: str, sid: str = "default") -> str:
         if sid not in self.state:
@@ -145,6 +172,14 @@ class Agent:
                         
                         # Call the actual tool
                         if tool_name == "generate_banner":
+                            # Fetch weather if requested
+                            weather_data = None
+                            if tool_input.get('weather_location'):
+                                weather_location = tool_input.get('weather_location', 'London')
+                                weather_data = self._fetch_weather(weather_location)
+                                if weather_data:
+                                    print(f"🌤️  Weather: {weather_data['condition']}, {weather_data['temperature']}°C in {weather_location}")
+                            
                             result = await generate_banner(
                                 campaign_name=tool_input.get('campaign_name', 'Campaign'),
                                 brand_name=tool_input.get('brand_name', ''),
@@ -153,6 +188,7 @@ class Agent:
                                 cta=tool_input.get('cta', ''),
                                 additional_instructions=tool_input.get('additional_instructions', ''),
                                 reference_image_path=tool_input.get('reference_image_path', img_path or ''),
+                                weather_data=weather_data,
                                 model=tool_input.get('model', 'imagen4')
                             )
                         elif tool_name == "generate_video":
