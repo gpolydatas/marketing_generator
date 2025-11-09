@@ -983,9 +983,31 @@ def main():
                                         st.metric("CTA", f"{scores.get('cta_effectiveness', 0)}/10")
                                 else:
                                     st.warning("⚠️ Validation issues detected")
-                                    if val_result.get('issues'):
-                                        for issue in val_result['issues']:
+                                    
+                                    if 'error' in val_result:
+                                        st.error(f"Error: {val_result['error']}")
+                                    
+                                    scores = val_result.get('scores', {})
+                                    if scores:
+                                        col1, col2, col3 = st.columns(3)
+                                        with col1:
+                                            st.metric("Brand", f"{scores.get('brand_visibility', 0)}/10")
+                                        with col2:
+                                            st.metric("Message", f"{scores.get('message_clarity', 0)}/10")
+                                        with col3:
+                                            st.metric("CTA", f"{scores.get('cta_effectiveness', 0)}/10")
+                                    
+                                    issues = val_result.get('issues', [])
+                                    if issues:
+                                        st.markdown("**Issues:**")
+                                        for issue in issues:
                                             st.write(f"• {issue}")
+                                    
+                                    if val_result.get('summary'):
+                                        st.info(val_result['summary'])
+                                    
+                                    with st.expander("🔍 Debug"):
+                                        st.json(val_result)
                         else:
                             st.success("🎨 Visual-only banner created successfully!")
                         
