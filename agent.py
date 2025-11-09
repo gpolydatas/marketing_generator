@@ -191,6 +191,41 @@ class Agent:
                                 weather_data=weather_data,
                                 model=tool_input.get('model', 'imagen4')
                             )
+                            
+                            # Run validation if text elements exist
+                            res = json.loads(result)
+                            if "error" not in res:
+                                brand = tool_input.get('brand_name', '')
+                                message = tool_input.get('message', '')
+                                cta = tool_input.get('cta', '')
+                                
+                                if brand or message or cta:
+                                    from banner_mcp_server import validate_banner
+                                    val_result = await validate_banner(
+                                        filepath=res['filepath'],
+                                        campaign_name=tool_input.get('campaign_name', 'Campaign'),
+                                        brand_name=brand,
+                                        message=message,
+                                        cta=cta
+                                    )
+                                    val_data = json.loads(val_result)
+                                    
+                                    # Add validation to response
+                                    response_text = f"✅ Banner created!\n\n📁 {res['filename']}\n"
+                                    
+                                    if val_data.get('passed'):
+                                        response_text += "✅ Validation PASSED\n"
+                                        scores = val_data.get('scores', {})
+                                        response_text += f"Scores: Brand {scores.get('brand_visibility', 0)}/10, Message {scores.get('message_clarity', 0)}/10, CTA {scores.get('cta_effectiveness', 0)}/10\n"
+                                    else:
+                                        response_text += "⚠️ Validation Issues:\n"
+                                        for issue in val_data.get('issues', []):
+                                            response_text += f"• {issue}\n"
+                                    
+                                    response_text += f"\n📥 /files/{res['filename']}"
+                                    return response_text
+                            
+                            return result if "error" in res else f"✅ Banner created!\n\n📁 {res['filename']}\n📥 /files/{res['filename']}"
                         elif tool_name == "generate_video":
                             result = await generate_video(
                                 campaign_name=tool_input.get('campaign_name', 'Campaign'),

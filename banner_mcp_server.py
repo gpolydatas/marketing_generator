@@ -66,6 +66,28 @@ def resize_to_exact(image: Image.Image, target_w: int, target_h: int) -> Image.I
     return image
 
 
+def resize_to_exact(image: Image.Image, target_w: int, target_h: int) -> Image.Image:
+    """Resize image to exact dimensions using smart crop"""
+    orig_w, orig_h = image.size
+    target_ratio = target_w / target_h
+    orig_ratio = orig_w / orig_h
+    
+    if orig_ratio > target_ratio:
+        new_h = target_h
+        new_w = int(target_h * orig_ratio)
+        image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        left = (new_w - target_w) // 2
+        image = image.crop((left, 0, left + target_w, target_h))
+    else:
+        new_w = target_w
+        new_h = int(target_w / orig_ratio)
+        image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        top = (new_h - target_h) // 2
+        image = image.crop((0, top, target_w, top + target_h))
+    
+    return image
+
+
 async def generate_banner(
     campaign_name: str,
     brand_name: str,
