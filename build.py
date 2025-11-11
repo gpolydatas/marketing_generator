@@ -35,10 +35,29 @@ print("✓ Downloaded")
 # Download get-pip
 print("\n[3/8] Downloading get-pip...")
 urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", "get-pip.py")
-print("✓ Downloaded")
+
+# Setup Python with packages
+print("\n[4/8] Installing packages in embedded Python...")
+# Uncomment python311._pth to allow pip
+pth_file = "python-embed/python313._pth"
+if os.path.exists(pth_file):
+    with open(pth_file, "r") as f:
+        content = f.read()
+    with open(pth_file, "w") as f:
+        f.write(content.replace("#import site", "import site"))
+
+# Install pip
+subprocess.run(["wine", "python-embed/python.exe", "get-pip.py"], 
+    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+# Install all packages
+packages = "anthropic openai google-generativeai fastapi uvicorn streamlit pydantic python-multipart Pillow PyYAML nest-asyncio requests aiohttp"
+subprocess.run(["wine", "python-embed/python.exe", "-m", "pip", "install"] + packages.split(),
+    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+print("✓ Packages installed")
 
 # Create launcher
-print("\n[4/8] Creating launcher...")
+print("\n[5/8] Creating launcher...")
 with open("launcher.py", "w") as f:
     f.write('''
 import os, sys, subprocess, webbrowser, time
@@ -46,16 +65,6 @@ import os, sys, subprocess, webbrowser, time
 app_dir = os.path.dirname(os.path.abspath(__file__))
 python_exe = os.path.join(app_dir, "python", "python.exe")
 os.chdir(app_dir)
-
-# First run setup
-if not os.path.exists("python/.setup_done"):
-    print("First run: Installing packages...")
-    subprocess.run([python_exe, "get-pip.py"], check=True, 
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run([python_exe, "-m", "pip", "install", "-q", "-r", "requirements.txt"], 
-        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    open("python/.setup_done", "w").close()
-
 os.makedirs("outputs", exist_ok=True)
 
 print("Starting...")
@@ -81,7 +90,7 @@ streamlit.terminate()
 ''')
 
 # Create wrapper executable
-print("\n[5/8] Creating wrapper...")
+print("\n[6/8] Creating wrapper...")
 with open("wrapper.vbs", "w") as f:
     f.write('''Set objShell = CreateObject("WScript.Shell")
 strPath = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
@@ -90,7 +99,7 @@ objShell.Run "python\\python.exe launcher.py", 1, False
 ''')
 
 # Build package
-print("\n[6/8] Building package...")
+print("\n[7/8] Building package...")
 if os.path.exists("pkg"):
     shutil.rmtree("pkg")
 os.makedirs("pkg")
@@ -99,7 +108,7 @@ os.makedirs("pkg")
 shutil.copytree("python-embed", "pkg/python")
 
 # Copy files
-files = ["launcher.py", "wrapper.vbs", "get-pip.py",
+files = ["launcher.py", "wrapper.vbs",
     "streamlit_app.py", "fastapi_server.py", "agent.py",
     "banner_mcp_server.py", "video_mcp_server.py", "adaptive_media_api.py",
     "fastagent.config.yaml", "fastagent.secrets.yaml"]
@@ -108,14 +117,10 @@ for f in files:
     if os.path.exists(f):
         shutil.copy(f, "pkg/")
 
-# Create requirements.txt
-with open("pkg/requirements.txt", "w") as f:
-    f.write("anthropic\nopenai\ngoogle-generativeai\nfastapi\nuvicorn\nstreamlit\npydantic\npython-multipart\nPillow\nPyYAML\nnest-asyncio\nrequests\naiohttp\n")
-
 print("✓ Package built")
 
 # Create NSIS installer script
-print("\n[7/8] Creating installer script...")
+print("\n[8/8] Creating installer script...")
 with open("installer.nsi", "w") as f:
     f.write('''
 !include "MUI2.nsh"
@@ -158,7 +163,7 @@ SectionEnd
 ''')
 
 # Build installer
-print("\n[8/8] Building Setup.exe...")
+print("\n[9/8] Building Setup.exe...")
 subprocess.run(["makensis", "installer.nsi"], check=True)
 
 print("\n" + "=" * 60)
