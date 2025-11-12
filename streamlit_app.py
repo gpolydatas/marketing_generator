@@ -700,250 +700,274 @@ def main():
         
         col_banner, col_video = st.columns(2)
         
-        # BANNER CREATION
-        with col_banner:
-            st.markdown("#### 📱 Create Banner")
+    # BANNER CREATION
+    with col_banner:
+        st.markdown("#### 📱 Create Banner")
+        
+        with st.form("banner_form"):
+            campaign = st.text_input("Campaign Name*", "Black Friday Sale", help="Name of your campaign")
             
-            with st.form("banner_form"):
-                campaign = st.text_input("Campaign Name*", "Black Friday Sale", help="Name of your campaign")
+            # Move no-text option to be with other text options
+            st.markdown("##### 📝 Text Content")
+            no_text_option = st.checkbox(
+                "Create visual-only banner (no text)", 
+                value=False,
+                help="Generate a banner without any text - pure visual design"
+            )
+            
+            if no_text_option:
+                st.info("🎨 Creating visual-only banner - no text will be added")
+                brand = ""
+                message = ""
+                cta = ""
+            else:
                 brand = st.text_input("Brand Name*", "TechStore", help="Keep it short (2-3 words)")
-                banner_type = st.selectbox("Banner Type*", ["social", "leaderboard", "square"], 
-                                          help="social: 1200×628, leaderboard: 728×90, square: 1024×1024")
                 message = st.text_input("Message*", "Up to 70% Off", help="Keep under 8 words")
                 cta = st.text_input("Call to Action*", "Shop Now", help="1-3 words like 'Shop Now'")
-                
-                # STYLE SETTINGS INSIDE FORM
-                st.markdown("##### 🎨 Style Settings")
-                col_style1, col_style2 = st.columns(2)
-                with col_style1:
-                    global_font = st.selectbox(
-                        "Font Family",
-                        options=['Default', 'Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Verdana', 'Courier', 'Impact', 'Comic Sans'],
-                        help="Font will be used for this banner",
-                        key='banner_font'
-                    )
-                        
-                with col_style2:
-                    global_color_mode = st.radio(
-                        "Color Mode",
-                        options=['Auto', 'Custom'],
-                        horizontal=True,
-                        help="Auto lets AI choose colors, Custom uses your colors",
-                        key='banner_color_mode'
-                    )
-                
-                # ALWAYS show color fields - ALWAYS ENABLED
-                st.markdown("---")
-                st.markdown("**🎨 Brand Colors**")
-                
-                if global_color_mode == 'Auto':
-                    st.caption("ℹ️ Color Mode is set to 'Auto' - AI will choose colors. To use custom colors, select 'Custom' above.")
-                else:
-                    st.info("🎨 Enter hex color codes (e.g., #FF4B4B for red, #FFFFFF for white)")
-                
-                col_gc1, col_gc2 = st.columns(2)
-                with col_gc1:
-                    global_primary = st.text_input(
-                        "🔴 Primary Color (Hex)", 
-                        value='#FF4B4B', 
-                        help="Enter hex code like #FF4B4B (red) or #0000FF (blue)", 
-                        key='banner_primary',
-                        max_chars=7,
-                        placeholder="#FF4B4B"
-                    )
-                with col_gc2:
-                    global_secondary = st.text_input(
-                        "⚪ Secondary Color (Hex)", 
-                        value='#FFFFFF', 
-                        help="Enter hex code like #FFFFFF (white) or #000000 (black)", 
-                        key='banner_secondary',
-                        max_chars=7,
-                        placeholder="#FFFFFF"
-                    )
-                
-                # Show preview and validation only when Custom mode
-                if global_color_mode == 'Custom':
-                    if global_primary and global_secondary:
-                        # Check if valid hex
-                        import re
-                        if re.match(r'^#[0-9A-Fa-f]{6}$', global_primary) and re.match(r'^#[0-9A-Fa-f]{6}$', global_secondary):
-                            col_p1, col_p2 = st.columns(2)
-                            with col_p1:
-                                st.markdown(f'<div style="background-color: {global_primary}; padding: 15px; border-radius: 5px; text-align: center; color: white; font-weight: bold; border: 2px solid #ddd;">Primary Preview</div>', unsafe_allow_html=True)
-                            with col_p2:
-                                st.markdown(f'<div style="background-color: {global_secondary}; padding: 15px; border-radius: 5px; text-align: center; border: 2px solid #ddd; font-weight: bold;">Secondary Preview</div>', unsafe_allow_html=True)
-                        else:
-                            st.warning("⚠️ Please enter valid hex codes (format: #RRGGBB)")
-                    
-                    # Common color suggestions
-                    with st.expander("💡 Common Color Codes - Click to See Examples"):
-                        st.markdown("""
-                        **Reds:** #FF0000 (bright red) • #FF4B4B (coral red) • #DC143C (crimson)  
-                        **Blues:** #0000FF (bright blue) • #1E90FF (dodger blue) • #4169E1 (royal blue)  
-                        **Greens:** #00FF00 (bright green) • #32CD32 (lime green) • #228B22 (forest green)  
-                        **Neutrals:** #FFFFFF (white) • #000000 (black) • #808080 (gray) • #CCCCCC (light gray)  
-                        **Purples:** #800080 (purple) • #9370DB (medium purple) • #8B008B (dark purple)  
-                        **Oranges:** #FFA500 (orange) • #FF8C00 (dark orange) • #FFD700 (gold)  
-                        **Yellows:** #FFFF00 (yellow) • #FFD700 (gold) • #FFA500 (orange-yellow)
-                        
-                        💡 **Tip:** Copy and paste these codes into the fields above!
-                        """)
-                
-                # IMAGE UPLOAD for style reference
-                st.markdown("##### 📎 Optional: Upload Reference Image")
-                reference_image = st.file_uploader(
-                    "Upload an image for style inspiration (optional)",
-                    type=['png', 'jpg', 'jpeg'],
-                    help="Upload a reference image to guide the style, colors, and composition",
-                    key="banner_ref_img"
-                )
-                
-                # WEATHER CONDITIONS SELECTION - NOW INSIDE FORM
-                st.markdown("##### 🌤️ Weather Conditions (Optional)")
-                weather_enabled = st.checkbox(
-                    "Include Weather Data",
-                    value=st.session_state.get('include_weather', False),
-                    help="Add current weather information to the banner",
-                    key='include_weather_toggle'
-                )
-                
-                # Initialize w_location with default
-                w_location = st.session_state.weather_location
-                
-                if weather_enabled:
-                    w_location = st.text_input(
-                        "Location",
-                        value=st.session_state.weather_location,
-                        help="City name for weather data",
-                        key='weather_location_input'
-                    )
-                    st.session_state.weather_location = w_location
-                    
-                    st.markdown("**Select Weather Data to Include:**")
-                    col_w1, col_w2, col_w3 = st.columns(3)
-                    with col_w1:
-                        w_temp = st.checkbox("Temperature", value=True, key='w_temp')
-                        w_condition = st.checkbox("Condition", value=True, key='w_condition')
-                    with col_w2:
-                        w_humidity = st.checkbox("Humidity", value=False, key='w_humidity')
-                        w_wind = st.checkbox("Wind Speed", value=False, key='w_wind')
-                    with col_w3:
-                        w_description = st.checkbox("Description", value=True, key='w_description')
-                    
-                    # Store in session state
-                    st.session_state.weather_includes = {
-                        'temperature': w_temp,
-                        'condition': w_condition,
-                        'humidity': w_humidity,
-                        'wind': w_wind,
-                        'description': w_description
-                    }
-                
-                submitted = st.form_submit_button("🎨 Generate Banner", type="primary", use_container_width=True)
             
-            if submitted:
-                # Update session state for weather automation to use these settings
-                if global_font != 'Default':
-                    st.session_state.weather_font = global_font
-                if global_color_mode == 'Custom' and global_primary and global_secondary:
-                    st.session_state.weather_primary_color = global_primary
-                    st.session_state.weather_secondary_color = global_secondary
+            banner_type = st.selectbox("Banner Type*", ["social", "leaderboard", "square", "digital_6_sheet", "mpu", "mobile_banner_small", "mobile_banner_standard"], 
+                                        help="social: 1200×628, leaderboard: 728×90, square: 1024×1024, digital_6_sheet: 1080×1920, mpu: 300×250, mobile_banner_small: 300×50, mobile_banner_standard: 320×50"
+                                       )
+            # STYLE SETTINGS INSIDE FORM
+            st.markdown("##### 🎨 Style Settings")
+            col_style1, col_style2 = st.columns(2)
+            with col_style1:
+                global_font = st.selectbox(
+                    "Font Family",
+                    options=['Default', 'Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Verdana', 'Courier', 'Impact', 'Comic Sans'],
+                    help="Font will be used for this banner",
+                    key='banner_font'
+                )
+                    
+            with col_style2:
+                global_color_mode = st.radio(
+                    "Color Mode",
+                    options=['Auto', 'Custom'],
+                    horizontal=True,
+                    help="Auto lets AI choose colors, Custom uses your colors",
+                    key='banner_color_mode'
+                )
+            
+            # ALWAYS show color fields - ALWAYS ENABLED
+            st.markdown("---")
+            st.markdown("**🎨 Brand Colors**")
+            
+            if global_color_mode == 'Auto':
+                st.caption("ℹ️ Color Mode is set to 'Auto' - AI will choose colors. To use custom colors, select 'Custom' above.")
+            else:
+                st.info("🎨 Enter hex color codes (e.g., #FF4B4B for red, #FFFFFF for white)")
+            
+            col_gc1, col_gc2 = st.columns(2)
+            with col_gc1:
+                global_primary = st.text_input(
+                    "🔴 Primary Color (Hex)", 
+                    value='#FF4B4B', 
+                    help="Enter hex code like #FF4B4B (red) or #0000FF (blue)", 
+                    key='banner_primary',
+                    max_chars=7,
+                    placeholder="#FF4B4B"
+                )
+            with col_gc2:
+                global_secondary = st.text_input(
+                    "⚪ Secondary Color (Hex)", 
+                    value='#FFFFFF', 
+                    help="Enter hex code like #FFFFFF (white) or #000000 (black)", 
+                    key='banner_secondary',
+                    max_chars=7,
+                    placeholder="#FFFFFF"
+                )
+            
+            # Show preview and validation only when Custom mode
+            if global_color_mode == 'Custom':
+                if global_primary and global_secondary:
+                    # Check if valid hex
+                    import re
+                    if re.match(r'^#[0-9A-Fa-f]{6}$', global_primary) and re.match(r'^#[0-9A-Fa-f]{6}$', global_secondary):
+                        col_p1, col_p2 = st.columns(2)
+                        with col_p1:
+                            st.markdown(f'<div style="background-color: {global_primary}; padding: 15px; border-radius: 5px; text-align: center; color: white; font-weight: bold; border: 2px solid #ddd;">Primary Preview</div>', unsafe_allow_html=True)
+                        with col_p2:
+                            st.markdown(f'<div style="background-color: {global_secondary}; padding: 15px; border-radius: 5px; text-align: center; border: 2px solid #ddd; font-weight: bold;">Secondary Preview</div>', unsafe_allow_html=True)
+                    else:
+                        st.warning("⚠️ Please enter valid hex codes (format: #RRGGBB)")
                 
-                if not all([campaign, brand, message, cta]):
-                    st.error("Please fill in all required fields")
+                # Common color suggestions
+                with st.expander("💡 Common Color Codes - Click to See Examples"):
+                    st.markdown("""
+                    **Reds:** #FF0000 (bright red) • #FF4B4B (coral red) • #DC143C (crimson)  
+                    **Blues:** #0000FF (bright blue) • #1E90FF (dodger blue) • #4169E1 (royal blue)  
+                    **Greens:** #00FF00 (bright green) • #32CD32 (lime green) • #228B22 (forest green)  
+                    **Neutrals:** #FFFFFF (white) • #000000 (black) • #808080 (gray) • #CCCCCC (light gray)  
+                    **Purples:** #800080 (purple) • #9370DB (medium purple) • #8B008B (dark purple)  
+                    **Oranges:** #FFA500 (orange) • #FF8C00 (dark orange) • #FFD700 (gold)  
+                    **Yellows:** #FFFF00 (yellow) • #FFD700 (gold) • #FFA500 (orange-yellow)
+                    
+                    💡 **Tip:** Copy and paste these codes into the fields above!
+                    """)
+            
+            # IMAGE UPLOAD for style reference
+            st.markdown("##### 📎 Optional: Upload Reference Image")
+            reference_image = st.file_uploader(
+                "Upload an image for style inspiration (optional)",
+                type=['png', 'jpg', 'jpeg'],
+                help="Upload a reference image to guide the style, colors, and composition",
+                key="banner_ref_img"
+            )
+            
+            # WEATHER CONDITIONS SELECTION - NOW INSIDE FORM
+            st.markdown("##### 🌤️ Weather Conditions (Optional)")
+            weather_enabled = st.checkbox(
+                "Include Weather Data",
+                value=st.session_state.get('include_weather', False),
+                help="Add current weather information to the banner",
+                key='include_weather_toggle'
+            )
+            
+            # Initialize w_location with default
+            w_location = st.session_state.weather_location
+            
+            if weather_enabled:
+                w_location = st.text_input(
+                    "Location",
+                    value=st.session_state.weather_location,
+                    help="City name for weather data",
+                    key='weather_location_input'
+                )
+                st.session_state.weather_location = w_location
+                
+                st.markdown("**Select Weather Data to Include:**")
+                col_w1, col_w2, col_w3 = st.columns(3)
+                with col_w1:
+                    w_temp = st.checkbox("Temperature", value=True, key='w_temp')
+                    w_condition = st.checkbox("Condition", value=True, key='w_condition')
+                with col_w2:
+                    w_humidity = st.checkbox("Humidity", value=False, key='w_humidity')
+                    w_wind = st.checkbox("Wind Speed", value=False, key='w_wind')
+                with col_w3:
+                    w_description = st.checkbox("Description", value=True, key='w_description')
+                
+                # Store in session state
+                st.session_state.weather_includes = {
+                    'temperature': w_temp,
+                    'condition': w_condition,
+                    'humidity': w_humidity,
+                    'wind': w_wind,
+                    'description': w_description
+                }
+            
+            submitted = st.form_submit_button("🎨 Generate Banner", type="primary", use_container_width=True)
+        
+        if submitted:
+            # Update session state for weather automation to use these settings
+            if global_font != 'Default':
+                st.session_state.weather_font = global_font
+            if global_color_mode == 'Custom' and global_primary and global_secondary:
+                st.session_state.weather_primary_color = global_primary
+                st.session_state.weather_secondary_color = global_secondary
+            
+            if not all([campaign, banner_type]):
+                st.error("Please fill in all required fields")
+            else:
+                # Check if weather is enabled
+                weather_data = None
+                if weather_enabled and w_location:
+                    with st.spinner("Fetching weather data..."):
+                        weather_data = fetch_weather(w_location)
+                        if "error" in weather_data:
+                            st.warning(f"Weather API error: {weather_data['error']}. Generating banner without weather data.")
+                            weather_data = None
+                
+                # Save reference image if uploaded
+                reference_image_path = ""
+                if reference_image is not None:
+                    outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                    if not os.path.exists(outputs_dir):
+                        os.makedirs(outputs_dir)
+                    
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    ref_filename = f"reference_{timestamp}_{reference_image.name}"
+                    reference_image_path = os.path.join(outputs_dir, ref_filename)
+                    
+                    with open(reference_image_path, 'wb') as f:
+                        f.write(reference_image.getbuffer())
+                    
+                    st.info(f"📎 Reference image saved: {ref_filename}")
+                
+                # Use form's font and colors
+                font_to_use = global_font if global_font != 'Default' else 'Arial'
+                primary_to_use = global_primary if global_color_mode == 'Custom' and global_primary else '#FFFFFF'
+                secondary_to_use = global_secondary if global_color_mode == 'Custom' and global_secondary else '#000000'
+                
+                # Build style instructions - CRITICAL: Add no-text instruction if selected
+                style_instructions = ""
+                if no_text_option:
+                    style_instructions += "NO TEXT: Create a completely text-free banner. No brand names, no messages, no call-to-action text. Pure visual design only."
                 else:
-                    # Check if weather is enabled
-                    weather_data = None
-                    if weather_enabled and w_location:
-                        with st.spinner("Fetching weather data..."):
-                            weather_data = fetch_weather(w_location)
-                            if "error" in weather_data:
-                                st.warning(f"Weather API error: {weather_data['error']}. Generating banner without weather data.")
-                                weather_data = None
-                    
-                    # Save reference image if uploaded
-                    reference_image_path = ""
-                    if reference_image is not None:
-                        outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-                        if not os.path.exists(outputs_dir):
-                            os.makedirs(outputs_dir)
-                        
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        ref_filename = f"reference_{timestamp}_{reference_image.name}"
-                        reference_image_path = os.path.join(outputs_dir, ref_filename)
-                        
-                        with open(reference_image_path, 'wb') as f:
-                            f.write(reference_image.getbuffer())
-                        
-                        st.info(f"📎 Reference image saved: {ref_filename}")
-                    
-                    # Use form's font and colors
-                    font_to_use = global_font if global_font != 'Default' else 'Arial'
-                    primary_to_use = global_primary if global_color_mode == 'Custom' and global_primary else '#FFFFFF'
-                    secondary_to_use = global_secondary if global_color_mode == 'Custom' and global_secondary else '#000000'
-                    
-                    # Build style instructions
-                    style_instructions = ""
                     if global_font != 'Default':
                         style_instructions += f"\nFONT: Use {global_font} font family or similar style."
                     if global_color_mode == 'Custom' and global_primary and global_secondary:
                         style_instructions += f"\nCOLORS: Primary color {global_primary}, Secondary color {global_secondary}. Use these colors prominently in the design."
+                
+                # Add weather data to message if available (only if not no-text)
+                final_message = message
+                final_cta = cta
+                if not no_text_option and weather_data and "error" not in weather_data:
+                    weather_includes = st.session_state.get('weather_includes', {
+                        'temperature': True,
+                        'condition': True,
+                        'humidity': False,
+                        'wind': False,
+                        'description': True
+                    })
                     
-                    # Add weather data to message if available
-                    final_message = message
-                    final_cta = cta
-                    if weather_data and "error" not in weather_data:
-                        weather_includes = st.session_state.get('weather_includes', {
-                            'temperature': True,
-                            'condition': True,
-                            'humidity': False,
-                            'wind': False,
-                            'description': True
-                        })
-                        
-                        # Build weather info string - use .get() for safe access
-                        weather_parts = []
-                        if weather_includes.get('temperature') and 'temperature' in weather_data:
-                            weather_parts.append(f"{weather_data['temperature']}°C")
-                        if weather_includes.get('condition') and 'condition' in weather_data:
-                            weather_parts.append(weather_data['condition'])
-                        if weather_includes.get('humidity') and 'humidity' in weather_data:
-                            weather_parts.append(f"{weather_data['humidity']}% humidity")
-                        if weather_includes.get('wind') and 'wind_speed' in weather_data:
-                            weather_parts.append(f"{weather_data['wind_speed']} km/h wind")
-                        
-                        weather_str = " | ".join(weather_parts)
-                        final_message = f"{message} | {weather_str}" if weather_parts else message
-                        
-                        # Safely get description for CTA
-                        if weather_includes.get('description') and 'description' in weather_data:
-                            final_cta = weather_data.get('description', cta).title()
+                    # Build weather info string - use .get() for safe access
+                    weather_parts = []
+                    if weather_includes.get('temperature') and 'temperature' in weather_data:
+                        weather_parts.append(f"{weather_data['temperature']}°C")
+                    if weather_includes.get('condition') and 'condition' in weather_data:
+                        weather_parts.append(weather_data['condition'])
+                    if weather_includes.get('humidity') and 'humidity' in weather_data:
+                        weather_parts.append(f"{weather_data['humidity']}% humidity")
+                    if weather_includes.get('wind') and 'wind_speed' in weather_data:
+                        weather_parts.append(f"{weather_data['wind_speed']} km/h wind")
                     
-                    with st.spinner("🎨 Generating banner... (10-30 seconds)"):
-                        # Call modified function
-                        from banner_mcp_server import generate_banner
-                        
-                        result_json = asyncio.run(generate_banner(
-                            campaign_name=campaign,
-                            brand_name=brand,
-                            banner_type=banner_type,
-                            message=final_message,
-                            cta=final_cta,
-                            additional_instructions=style_instructions,
-                            reference_image_path=reference_image_path,
-                            font_family=font_to_use,
-                            primary_color=primary_to_use,
-                            secondary_color=secondary_to_use,
-                            weather_data=weather_data  # Pass weather data for scene modification
-                        ))
-                        result = json.loads(result_json)
-                        
-                        if "error" in result:
-                            st.error(f"❌ Error: {result['error']}")
-                        elif result.get("success"):
-                            filepath = result['filepath']
+                    weather_str = " | ".join(weather_parts)
+                    final_message = f"{message} | {weather_str}" if weather_parts else message
+                    
+                    # Safely get description for CTA
+                    if weather_includes.get('description') and 'description' in weather_data:
+                        final_cta = weather_data.get('description', cta).title()
+                
+                with st.spinner("🎨 Generating banner... (10-30 seconds)"):
+                    # Call modified function
+                    from banner_mcp_server import generate_banner
+                    
+                    result_json = asyncio.run(generate_banner(
+                        campaign_name=campaign,
+                        brand_name=brand,
+                        banner_type=banner_type,
+                        message=final_message,
+                        cta=final_cta,
+                        additional_instructions=style_instructions,
+                        reference_image_path=reference_image_path,
+                        font_family=font_to_use,
+                        primary_color=primary_to_use,
+                        secondary_color=secondary_to_use,
+                        weather_data=weather_data  # Pass weather data for scene modification
+                    ))
+                    result = json.loads(result_json)
+                    
+                    if "error" in result:
+                        st.error(f"❌ Error: {result['error']}")
+                    elif result.get("success"):
+                        filepath = result['filepath']
+                        if no_text_option:
+                            st.success(f"✅ Visual-only banner generated: {result['filename']}")
+                        else:
                             st.success(f"✅ Banner generated: {result['filename']}")
-                            
+                        
+                        # Only validate if there's text content
+                        if not no_text_option and (brand or message or cta):
                             with st.spinner("🔍 Validating..."):
                                 val_result = asyncio.run(validate_banner_direct(filepath, campaign, brand, message, cta))
                                 
@@ -959,15 +983,40 @@ def main():
                                         st.metric("CTA", f"{scores.get('cta_effectiveness', 0)}/10")
                                 else:
                                     st.warning("⚠️ Validation issues detected")
-                                    if val_result.get('issues'):
-                                        for issue in val_result['issues']:
+                                    
+                                    if 'error' in val_result:
+                                        st.error(f"Error: {val_result['error']}")
+                                    
+                                    scores = val_result.get('scores', {})
+                                    if scores:
+                                        col1, col2, col3 = st.columns(3)
+                                        with col1:
+                                            st.metric("Brand", f"{scores.get('brand_visibility', 0)}/10")
+                                        with col2:
+                                            st.metric("Message", f"{scores.get('message_clarity', 0)}/10")
+                                        with col3:
+                                            st.metric("CTA", f"{scores.get('cta_effectiveness', 0)}/10")
+                                    
+                                    issues = val_result.get('issues', [])
+                                    if issues:
+                                        st.markdown("**Issues:**")
+                                        for issue in issues:
                                             st.write(f"• {issue}")
-                            
-                            st.markdown("### 📦 Preview")
-                            metadata = load_metadata(filepath)
-                            display_banner(filepath, metadata, key_suffix="create_preview")
-                            
-                            st.info("💡 Switch to Gallery tab to see all your content!")
+                                    
+                                    if val_result.get('summary'):
+                                        st.info(val_result['summary'])
+                                    
+                                    with st.expander("🔍 Debug"):
+                                        st.json(val_result)
+                        else:
+                            st.success("🎨 Visual-only banner created successfully!")
+                        
+                        st.markdown("### 📦 Preview")
+                        metadata = load_metadata(filepath)
+                        display_banner(filepath, metadata, key_suffix="create_preview")
+                        
+                        st.info("💡 Switch to Gallery tab to see all your content!")
+        
         
         # VIDEO CREATION
         with col_video:

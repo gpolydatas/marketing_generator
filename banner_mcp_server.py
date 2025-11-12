@@ -1,136 +1,151 @@
 #!/usr/bin/env python3
 """
-BANNER GENERATION MCP SERVER
-Exposes banner generation and validation as MCP tools
+BANNER GENERATION MCP SERVER - UNIFIED BEST VERSION
+Combines optimal resizing from version 1 with improved validation from version 2
 """
 
 import os
 import json
 import base64
+import yaml
 from datetime import datetime
 from openai import OpenAI
-from mcp.server import Server
-from mcp.types import Tool, TextContent
-from mcp.server.stdio import stdio_server
+from google import genai
+from google.genai import types
+from PIL import Image, ImageEnhance
+import io
 
-# Banner specifications
+# Banner specifications with PROPER aspect ratio mapping for Imagen
 BANNER_SPECS = {
-    "leaderboard": {"width": 728, "height": 90},
-    "social": {"width": 1200, "height": 628},
-    "square": {"width": 1024, "height": 1024},
+    "digital_6_sheet": {
+        "width": 1080, 
+        "height": 1920, 
+        "aspect": "9:16",
+        "description": "Vertical billboard format",
+        "needs_upscale": False
+    },
+    "leaderboard": {
+        "width": 728, 
+        "height": 90, 
+        "aspect": "16:9",
+        "description": "Website header banner",
+        "needs_upscale": True
+    },
+    "mpu": {
+        "width": 300, 
+        "height": 250, 
+        "aspect": "4:3",
+        "description": "Medium Rectangle ad unit",
+        "needs_upscale": True
+    },
+    "mobile_banner_300x50": {
+        "width": 300, 
+        "height": 50, 
+        "aspect": "16:9",
+        "description": "Small mobile banner",
+        "needs_upscale": True
+    },
+    "mobile_banner_320x50": {
+        "width": 320, 
+        "height": 50, 
+        "aspect": "16:9",
+        "description": "Standard mobile banner",
+        "needs_upscale": True
+    },
+    "social": {
+        "width": 1200, 
+        "height": 628, 
+        "aspect": "16:9",
+        "description": "Social media post",
+        "needs_upscale": False
+    },
+    "square": {
+        "width": 1024, 
+        "height": 1024, 
+        "aspect": "1:1",
+        "description": "Square format",
+        "needs_upscale": False
+    },
 }
 
-# Create MCP server
-app = Server("banner-tools")
-
-
-@app.list_tools()
-async def list_tools() -> list[Tool]:
-    """List available tools"""
-    return [
-        Tool(
-            name="generate_banner",
-            description="Generate a banner advertisement using DALL-E 3",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "campaign_name": {
-                        "type": "string",
-                        "description": "Name of the advertising campaign"
-                    },
-                    "brand_name": {
-                        "type": "string",
-                        "description": "Brand/company name"
-                    },
-                    "banner_type": {
-                        "type": "string",
-                        "enum": ["leaderboard", "social", "square"],
-                        "description": "Type of banner"
-                    },
-                    "message": {
-                        "type": "string",
-                        "description": "Main marketing message to display"
-                    },
-                    "cta": {
-                        "type": "string",
-                        "description": "Call-to-action text"
-                    },
-                    "additional_instructions": {
-                        "type": "string",
-                        "description": "Optional additional instructions for regeneration",
-                        "default": ""
-                    },
-                    "reference_image_path": {
-                        "type": "string",
-                        "description": "Optional: Full path to reference image for image-to-image generation (style transfer, inspiration)",
-                        "default": ""
-                    },
-                    "font_family": {
-                        "type": "string",
-                        "description": "Optional: Font family to use (Arial, Helvetica, Times New Roman, Georgia, Verdana, Courier, Impact)",
-                        "default": "Arial"
-                    },
-                    "primary_color": {
-                        "type": "string",
-                        "description": "Optional: Primary color hex code (e.g., #FFFFFF)",
-                        "default": "#FFFFFF"
-                    },
-                    "secondary_color": {
-                        "type": "string",
-                        "description": "Optional: Secondary/accent color hex code (e.g., #000000)",
-                        "default": "#000000"
-                    }
-                },
-                "required": ["campaign_name", "brand_name", "banner_type", "message", "cta"]
-            }
-        ),
-        Tool(
-            name="validate_banner",
-            description="Validate a generated banner against quality guidelines",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filepath": {
-                        "type": "string",
-                        "description": "Full path to the banner image file"
-                    },
-                    "campaign_name": {
-                        "type": "string",
-                        "description": "Name of campaign for context"
-                    },
-                    "brand_name": {
-                        "type": "string",
-                        "description": "Expected brand name"
-                    },
-                    "message": {
-                        "type": "string",
-                        "description": "Expected main message"
-                    },
-                    "cta": {
-                        "type": "string",
-                        "description": "Expected call-to-action text"
-                    }
-                },
-                "required": ["filepath", "campaign_name", "brand_name", "message", "cta"]
-            }
-        )
-    ]
-
-
-@app.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    """Handle tool calls"""
+def load_api_keys():
+    """Load API keys from secrets file"""
+    secrets_path = os.path.join(os.path.dirname(__file__), 'fastagent.secrets.yaml')
     
-    if name == "generate_banner":
-        result = await generate_banner(**arguments)
-        return [TextContent(type="text", text=result)]
+    if os.path.exists(secrets_path):
+        with open(secrets_path, 'r') as f:
+            secrets = yaml.safe_load(f)
+        
+        if 'openai' in secrets and 'api_key' in secrets['openai']:
+            os.environ['OPENAI_API_KEY'] = secrets['openai']['api_key']
+        
+        if 'google' in secrets and 'api_key' in secrets['google']:
+            os.environ['GOOGLE_API_KEY'] = secrets['google']['api_key']
+        
+        if 'anthropic' in secrets and 'api_key' in secrets['anthropic']:
+            os.environ['ANTHROPIC_API_KEY'] = secrets['anthropic']['api_key']
+
+
+def resize_to_exact(image: Image.Image, target_w: int, target_h: int) -> Image.Image:
+    """
+    BEST VERSION: Smart resize with quality preservation
+    Combines upscaling strategy with proper cropping and sharpening
+    """
+    orig_w, orig_h = image.size
+    target_ratio = target_w / target_h
+    orig_ratio = orig_w / orig_h
     
-    elif name == "validate_banner":
-        result = await validate_banner(**arguments)
-        return [TextContent(type="text", text=result)]
+    print(f"  📐 Resizing from {orig_w}x{orig_h} to {target_w}x{target_h}")
+    print(f"     Original ratio: {orig_ratio:.3f}, Target ratio: {target_ratio:.3f}")
     
+    # Calculate scale factor
+    scale_factor = max(target_w / orig_w, target_h / orig_h)
+    
+    # If we need to upscale significantly, do it in one step for better quality
+    if scale_factor > 1.5:
+        print(f"  ⬆️ Upscaling first for quality (factor: {scale_factor:.2f})")
+        intermediate_w = target_w * 2
+        intermediate_h = target_h * 2
+        image = image.resize((intermediate_w, intermediate_h), Image.Resampling.LANCZOS)
+        orig_w, orig_h = image.size
+        orig_ratio = orig_w / orig_h
+    
+    # Scale to cover target dimensions
+    if orig_ratio > target_ratio:
+        # Image is wider - scale by height
+        new_h = target_h
+        new_w = int(target_h * orig_ratio)
+        print(f"  📏 Scaling to {new_w}x{new_h} (scale by height)")
     else:
-        return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
+        # Image is taller - scale by width
+        new_w = target_w
+        new_h = int(target_w / orig_ratio)
+        print(f"  📏 Scaling to {new_w}x{new_h} (scale by width)")
+    
+    # Resize with high-quality resampling
+    image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    
+    # Center crop to exact dimensions
+    left = (new_w - target_w) // 2
+    top = (new_h - target_h) // 2
+    right = left + target_w
+    bottom = top + target_h
+    
+    print(f"  ✂️ Cropping to {target_w}x{target_h} (crop box: {left},{top},{right},{bottom})")
+    
+    image = image.crop((left, top, right, bottom))
+    
+    # Apply sharpening to reduce blur from resize
+    enhancer = ImageEnhance.Sharpness(image)
+    image = enhancer.enhance(1.2)
+    print(f"  ✨ Applied sharpening")
+    
+    # Verify final size
+    final_w, final_h = image.size
+    assert final_w == target_w and final_h == target_h, f"Resize failed: got {final_w}x{final_h}, expected {target_w}x{target_h}"
+    
+    print(f"  ✅ Final size: {final_w}x{final_h}")
+    return image
 
 
 async def generate_banner(
@@ -141,296 +156,355 @@ async def generate_banner(
     cta: str,
     additional_instructions: str = "",
     reference_image_path: str = "",
+    model: str = "imagen4",
     font_family: str = "Arial",
     primary_color: str = "#FFFFFF",
     secondary_color: str = "#000000",
     weather_data: dict = None
 ) -> str:
-    """Generate banner image using DALL-E 3 with optional reference image, font, color customization, and weather conditions"""
+    """Generate banner using Imagen 4 (default) or DALL-E 3"""
     
-    # Validate banner type
+    load_api_keys()
+    
+    # Normalize banner_type
+    banner_type = banner_type.lower().strip()
+    
     if banner_type not in BANNER_SPECS:
-        return json.dumps({
-            "error": f"Invalid banner_type. Must be one of: {list(BANNER_SPECS.keys())}"
-        })
+        return json.dumps({"error": f"Invalid banner_type '{banner_type}'. Must be one of: {list(BANNER_SPECS.keys())}"})
     
-    # Check API key
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return json.dumps({
-            "error": "OPENAI_API_KEY environment variable not set"
-        })
+    specs = BANNER_SPECS[banner_type]
     
-    # Build weather scene description
+    has_scene_description = additional_instructions and len(additional_instructions.strip()) > 10 and "NO TEXT" not in additional_instructions.upper()
+    
+    no_text = (
+        "NO TEXT" in additional_instructions.upper() or
+        (not brand_name and not message and not cta and not has_scene_description)
+    )
+    
+    if no_text:
+        brand_name = ""
+        message = ""
+        cta = ""
+        print("🚫 NO-TEXT MODE")
+    
+    scene_only = has_scene_description and not brand_name and not message and not cta
+    if scene_only:
+        print("🎬 SCENE-ONLY MODE")
+    
     weather_scene = ""
     if weather_data and isinstance(weather_data, dict) and "error" not in weather_data:
         condition = weather_data.get('condition', '').lower()
-        temp = weather_data.get('temperature', 20)
-        description = weather_data.get('description', '')
-        
-        # Map weather conditions to visual scene modifications
-        if 'rain' in condition or 'rain' in description:
-            weather_scene = "Scene shows rainy weather: wet surfaces, raindrops, puddles, gray overcast sky, rain falling"
-        elif 'snow' in condition or 'snow' in description:
-            weather_scene = "Scene shows snowy weather: snow falling, snow on ground, cold atmosphere, white/gray sky"
-        elif 'storm' in condition or 'thunder' in condition:
-            weather_scene = "Scene shows stormy weather: dark dramatic clouds, lightning, heavy rain, intense atmosphere"
-        elif 'cloud' in condition or 'overcast' in description:
-            weather_scene = "Scene shows cloudy/overcast weather: gray clouds, diffused light, muted colors, cool atmosphere"
-        elif 'clear' in condition or 'sun' in description:
-            if temp > 25:
-                weather_scene = "Scene shows hot sunny weather: bright sunshine, strong shadows, warm golden light, clear blue sky, heat haze"
-            else:
-                weather_scene = "Scene shows clear pleasant weather: blue sky, soft sunlight, comfortable atmosphere"
-        elif 'mist' in condition or 'fog' in description:
-            weather_scene = "Scene shows misty/foggy weather: reduced visibility, fog, hazy atmosphere, muted tones"
-        else:
-            weather_scene = f"Scene reflects current weather: {description}"
+        temp = weather_data.get('temperature', 0)
+        location = weather_data.get('location', '')
+        weather_scene = f"{condition} weather, {temp}°C in {location}"
     
-    # Generate prompt
-    specs = BANNER_SPECS[banner_type]
+    if model.lower() in ["imagen", "imagen4", "imagen-4", "gemini"]:
+        return await _generate_with_imagen(
+            campaign_name, brand_name, banner_type, message, cta,
+            additional_instructions, reference_image_path, specs,
+            no_text, scene_only, weather_scene
+        )
+    else:
+        return await _generate_with_dalle(
+            campaign_name, brand_name, banner_type, message, cta,
+            additional_instructions, reference_image_path, specs,
+            no_text, scene_only, weather_scene, font_family, primary_color, secondary_color
+        )
+
+
+async def _generate_with_imagen(
+    campaign_name, brand_name, banner_type, message, cta,
+    additional_instructions, reference_image_path, specs,
+    no_text, scene_only, weather_scene
+) -> str:
+    """Generate with Google Imagen 4 - BEST RESIZING VERSION"""
     
-    # Add reference image guidance if provided
-    reference_image_context = ""
-    use_variation = False
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return json.dumps({"error": "GOOGLE_API_KEY not set"})
     
+    print("=" * 60)
+    print(f"🎨 USING IMAGEN 4")
+    print(f"📋 Banner Type: {banner_type}")
+    print(f"🎯 Target Size: {specs['width']}x{specs['height']}px")
+    print(f"📐 Aspect Ratio: {specs['aspect']}")
+    print("=" * 60)
+    
+    client = genai.Client(api_key=api_key)
+    
+    # Build prompt (same logic as before)
     if reference_image_path and os.path.exists(reference_image_path):
-        use_variation = True
-        reference_image_context = f" (using {os.path.basename(reference_image_path)} as base)"
+        ref_image = Image.open(reference_image_path)
         
-        # SHORT PROMPT for edit mode (max 1000 chars)
-        prompt = f"""Modify this image to show different weather conditions while adding text.
+        if scene_only:
+            is_photo = any(word in additional_instructions.lower() for word in ['hyperrealistic', 'photorealistic', 'realistic', 'photograph', 'photo', 'camera'])
+            
+            if is_photo:
+                prompt = f"""Real photograph. Take the subject from this image and place it in this scene:
 
-{weather_scene if weather_scene else "Keep the current weather/atmosphere."}
+{additional_instructions}
 
-Add advertising text:
+{f"Weather: {weather_scene}" if weather_scene else ""}
+
+Natural conditions, motion blur, film grain, authentic photo not CGI"""
+            else:
+                prompt = f"""Using the subject from this image, create this scene:
+
+{additional_instructions}
+
+{f"Weather: {weather_scene}" if weather_scene else ""}
+
+Photorealistic, no text"""
+            
+            print(f"📝 PROMPT: {prompt[:150]}...")
+            
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-image",
+                contents=[prompt, ref_image],
+                config=types.GenerateContentConfig(
+                    response_modalities=['Image'],
+                    image_config=types.ImageConfig(aspect_ratio=specs['aspect'])
+                )
+            )
+        else:
+            prompt = f"""Transform this image into a professional banner.
+
 Brand: "{brand_name}" (large, bold)
 Message: "{message}" (clear)
-CTA: "{cta}" (on button)
+CTA: "{cta}" (button)
 
-Style:
-- Font: {font_family}
-- Colors: {primary_color}, {secondary_color}
-- Professional banner ad
-- Text must be exact and legible"""
-        
-        if additional_instructions:
-            prompt += f"\n\nNotes: {additional_instructions[:150]}"
-    else:
-        # FULL PROMPT for generation mode
-        prompt = f"""Create a professional banner advertisement for {brand_name}'s {campaign_name}.
-
-CRITICAL - TEXT MUST BE EXACT AND LEGIBLE:
-- Brand name: "{brand_name}" (spell exactly, make it LARGE and BOLD)
-- Main message: "{message}" (use these exact words, make it clear and readable)  
-- CTA button: "{cta}" (spell exactly, put on a prominent button)
-
-TYPOGRAPHY REQUIREMENTS:
-- Font style: {font_family} or similar clean, professional font
-- High contrast and legibility are critical
-- Text must be sharp and clear
-
-COLOR SCHEME REQUIREMENTS:
-- Primary color: {primary_color} (use for main elements, backgrounds, or key accents)
-- Secondary color: {secondary_color} (use for text, buttons, or contrast elements)
-- Create a harmonious palette using these colors
-- Ensure excellent contrast between text and background
-- Professional, eye-catching color application
-
-DESIGN REQUIREMENTS:
-- Dimensions: {specs['width']}x{specs['height']} pixels
-- Style: Clean, modern, professional advertising
-- Layout: Simple and uncluttered - text must be the focus
-- Brand prominence: Brand name is the largest element
-- CTA visibility: Call-to-action button stands out
-- Background: Clean or subtle - must not interfere with text readability
-
-TEXT HIERARCHY (in order of size):
-1. "{brand_name}" - Biggest, boldest, top or center
-2. "{message}" - Medium size, center area
-3. "{cta}" - On button, bottom or prominent position
-
-CRITICAL RULES:
-- Text must be crystal clear and easy to read
-- No decorative text or extra words
-- No complex patterns behind text
-- High contrast between text and background
-- Professional advertising quality
-- Use the specified font and color scheme
-
-Make the text perfect - that's the priority."""
-        
-        # Add additional instructions if provided
-        if additional_instructions:
-            prompt += f"\n\nIMPROVEMENTS FOR THIS ATTEMPT:\n{additional_instructions}"
-            prompt += f"\n\nREMINDER: Brand='{brand_name}', Message='{message}', CTA='{cta}' - spell exactly!"
-    
-    
-    # Initialize OpenAI client
-    client = OpenAI(api_key=api_key)
-    
-    # Determine DALL-E size
-    width = specs['width']
-    height = specs['height']
-    
-    if width == height:
-        size = "1024x1024"
-    elif width > height:
-        size = "1792x1024"
-    else:
-        size = "1024x1792"
-    
-    try:
-        # When reference image provided, analyze with Vision then generate
-        if use_variation and reference_image_path:
-            print(f"\n{'='*60}")
-            print(f"🖼️  REFERENCE IMAGE MODE")
-            print(f"{'='*60}")
-            print(f"Reference: {os.path.basename(reference_image_path)}")
+{additional_instructions if additional_instructions else ""}
+{f"Weather: {weather_scene}" if weather_scene else ""}"""
             
-            # Analyze with GPT-4 Vision
-            with open(reference_image_path, "rb") as img_file:
-                img_data = base64.b64encode(img_file.read()).decode('utf-8')
+            print(f"📝 PROMPT: {prompt[:150]}...")
             
-            print(f"\n🔍 Analyzing image with GPT-4 Vision...")
-            vision_response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Describe this image's subject, style, composition, colors, lighting, and mood. Be specific. Under 150 words."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{img_data}"}
-                        }
-                    ]
-                }],
-                max_tokens=250
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-image",
+                contents=[prompt, ref_image],
+                config=types.GenerateContentConfig(
+                    response_modalities=['Image'],
+                    image_config=types.ImageConfig(aspect_ratio=specs['aspect'])
+                )
             )
+    else:
+        # Text-only generation
+        if no_text and weather_scene:
+            prompt = f"""Create abstract visual art that conveys: {weather_scene}
+
+Weather-appropriate colors, mood, and atmosphere.
+NO text, NO words, NO letters.
+Pure visual design."""
+        elif scene_only:
+            is_photo = any(word in additional_instructions.lower() for word in ['hyperrealistic', 'photorealistic', 'realistic', 'photograph', 'photo', 'camera'])
             
-            style_desc = vision_response.choices[0].message.content
-            print(f"\n📊 VISION ANALYSIS:\n{style_desc}\n")
-            
-            # Print weather data
-            print(f"\n🌤️  WEATHER DATA:")
-            if weather_data:
-                for key, val in weather_data.items():
-                    print(f"  {key}: {val}")
+            if is_photo:
+                prompt = f"""Real photograph.
+
+{additional_instructions}
+
+{f"Weather: {weather_scene}" if weather_scene else ""}
+
+Natural lighting, film grain, authentic photo"""
             else:
-                print("  None")
-            print(f"\n☁️  WEATHER SCENE DESCRIPTION:\n{weather_scene if weather_scene else 'None'}\n")
-            
-            # Build final prompt - KEEP IT SHORT for DALL-E stability
-            if brand_name or message or cta:
-                final_prompt = f"""{style_desc[:150]}
+                prompt = f"""{additional_instructions}
 
-{weather_scene[:100] if weather_scene else ""}
+{f"Weather: {weather_scene}" if weather_scene else ""}
 
-Text: "{brand_name}" "{message}" "{cta}"
-{width}x{height}px"""
-            else:
-                # No text version - even shorter
-                final_prompt = f"""{style_desc[:200]}
-
-{weather_scene[:120] if weather_scene else "Professional setting"}
-
-{width}x{height}px, no text"""
-
-            # Ensure under 400 chars to avoid DALL-E errors
-            if len(final_prompt) > 400:
-                final_prompt = final_prompt[:400]
-            
-            print(f"\n📝 PROMPT TO DALL-E ({len(final_prompt)} chars):\n{'-'*60}\n{final_prompt}\n{'-'*60}\n")
-            
-            prompt = final_prompt
-        
+Photorealistic, no text"""
         else:
-            print(f"\n{'='*60}")
-            print(f"🎨 STANDARD GENERATION (no reference)")
-            print(f"{'='*60}\n")
-            print(f"Prompt length: {len(prompt)} chars\n")
+            prompt = f"""Professional banner for {brand_name}.
+
+Brand: "{brand_name}" (prominent)
+Message: "{message}"
+CTA: "{cta}" (button)
+
+{additional_instructions if additional_instructions else ""}
+{f"Weather: {weather_scene}" if weather_scene else ""}"""
         
-        # Generate with DALL-E 3
-        print(f"🚀 Calling DALL-E 3 ({size})...")
-        response = client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            size=size,
-            quality="hd",
-            style="vivid",
-            n=1
+        print(f"📝 PROMPT: {prompt[:150]}...")
+        
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=[prompt],
+            config=types.GenerateContentConfig(
+                response_modalities=['Image'],
+                image_config=types.ImageConfig(aspect_ratio=specs['aspect'])
+            )
         )
-        
-        image_url = response.data[0].url
-        revised_prompt = getattr(response.data[0], 'revised_prompt', prompt)
-        
-        # Download image
-        import requests
-        img_response = requests.get(image_url)
-        
-        if img_response.status_code == 200:
-            # Save with timestamp
+    
+    # Process response with BEST RESIZING
+    for part in response.parts:
+        if part.inline_data is not None:
+            # Save temp file first, then open with PIL
+            outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+            os.makedirs(outputs_dir, exist_ok=True)
+            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"banner_{banner_type}_{size}_{timestamp}.png"
+            temp_filename = f"temp_{timestamp}.png"
+            temp_filepath = os.path.join(outputs_dir, temp_filename)
             
-            # Save to local outputs directory
-            output_dir = os.path.join(os.path.dirname(__file__), "outputs")
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-            filepath = os.path.join(output_dir, filename)
+            # Save the Imagen response
+            imagen_image = part.as_image()
+            imagen_image.save(temp_filepath)
             
-            with open(filepath, 'wb') as f:
-                f.write(img_response.content)
+            # Now open with PIL
+            pil_image = Image.open(temp_filepath)
             
-            file_size = len(img_response.content) / 1024 / 1024
+            # Get original dimensions
+            orig_w, orig_h = pil_image.size
+            print(f"📦 Imagen generated: {orig_w}x{orig_h}px")
             
-            # Save metadata
-            metadata = {
-                "campaign": campaign_name,
-                "brand": brand_name,
-                "banner_type": banner_type,
-                "message": message,
-                "cta": cta,
-                "additional_instructions": additional_instructions,
-                "reference_image_path": reference_image_path if reference_image_path else None,
-                "font_family": font_family,
-                "primary_color": primary_color,
-                "secondary_color": secondary_color,
-                "filename": filename,
-                "filepath": filepath,
-                "url": image_url,
-                "size": size,
-                "file_size_mb": round(file_size, 2),
-                "revised_prompt": revised_prompt,
-                "timestamp": datetime.now().isoformat()
-            }
+            # Resize to EXACT dimensions using BEST algorithm
+            print(f"🔧 Resizing to exact dimensions...")
+            try:
+                resized_image = resize_to_exact(pil_image, specs['width'], specs['height'])
+            except Exception as e:
+                print(f"❌ Resize error: {e}")
+                try:
+                    os.remove(temp_filepath)
+                except:
+                    pass
+                return json.dumps({"error": f"Failed to resize image: {str(e)}"})
             
-            metadata_file = filepath.replace('.png', '.json')
-            with open(metadata_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            # Verify final dimensions
+            final_w, final_h = resized_image.size
+            if final_w != specs['width'] or final_h != specs['height']:
+                return json.dumps({
+                    "error": f"Resize verification failed: got {final_w}x{final_h}, expected {specs['width']}x{specs['height']}"
+                })
+            
+            # Save final image with maximum quality
+            mode = "notext" if no_text else "text"
+            filename = f"banner_{banner_type}_{mode}_{timestamp}.png"
+            filepath = os.path.join(outputs_dir, filename)
+            
+            # Save as PNG with no compression for maximum quality
+            resized_image.save(filepath, format='PNG', optimize=False, compress_level=0)
+            
+            # Delete temp file
+            try:
+                os.remove(temp_filepath)
+            except:
+                pass
+            
+            print(f"✅ Saved: {filename}")
+            print(f"✅ Verified dimensions: {final_w}x{final_h}px")
             
             return json.dumps({
                 "success": True,
                 "filename": filename,
                 "filepath": filepath,
-                "url": image_url,
-                "size": size,
-                "file_size_mb": round(file_size, 2),
-                "revised_prompt": revised_prompt,
-                "metadata_file": metadata_file
-            }, indent=2)
-        else:
-            return json.dumps({
-                "error": "Failed to download image from DALL-E"
+                "dimensions": f"{final_w}x{final_h}",
+                "original_dimensions": f"{orig_w}x{orig_h}",
+                "target_dimensions": f"{specs['width']}x{specs['height']}",
+                "model": "imagen4"
             })
-            
+    
+    return json.dumps({"error": "No image generated"})
+
+
+async def _generate_with_dalle(
+    campaign_name, brand_name, banner_type, message, cta,
+    additional_instructions, reference_image_path, specs,
+    no_text, scene_only, weather_scene, font_family, primary_color, secondary_color
+) -> str:
+    """Generate with DALL-E 3 - uses same BEST resize logic"""
+    
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return json.dumps({"error": "OPENAI_API_KEY not set"})
+    
+    print("=" * 60)
+    print(f"🎨 USING DALL-E 3")
+    print(f"🎯 Target: {specs['width']}x{specs['height']}px")
+    print("=" * 60)
+    
+    client = OpenAI(api_key=api_key)
+    
+    # Build prompt
+    if scene_only:
+        is_photo = any(word in additional_instructions.lower() for word in ['hyperrealistic', 'photorealistic', 'realistic', 'photograph', 'photo', 'camera'])
+        
+        if is_photo:
+            prompt = f"""Real photograph.
+
+{additional_instructions[:200]}
+
+{f"Weather: {weather_scene}" if weather_scene else ""}
+
+Natural conditions, film grain, authentic photo"""
+        else:
+            prompt = f"""{additional_instructions[:200]}
+
+{f"Weather: {weather_scene}" if weather_scene else ""}
+
+Photorealistic, no text"""
+    else:
+        prompt = f"""Banner: {specs['width']}x{specs['height']}px
+
+Brand: "{brand_name}"
+Message: "{message}"
+CTA: "{cta}"
+
+{additional_instructions[:100] if additional_instructions else ""}"""
+    
+    print(f"📝 PROMPT: {prompt[:200]}...")
+    
+    try:
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt[:1000],
+            size="1792x1024",
+            quality="hd",
+            n=1
+        )
     except Exception as e:
+        return json.dumps({"error": f"DALL-E API error: {str(e)}"})
+    
+    import requests
+    img_url = response.data[0].url
+    img_data = requests.get(img_url).content
+    image = Image.open(io.BytesIO(img_data))
+    
+    orig_w, orig_h = image.size
+    print(f"📦 DALL-E generated: {orig_w}x{orig_h}px")
+    
+    print(f"🔧 Resizing to exact dimensions...")
+    
+    try:
+        image = resize_to_exact(image, specs['width'], specs['height'])
+    except Exception as e:
+        return json.dumps({"error": f"Failed to resize image: {str(e)}"})
+    
+    # Verify
+    final_w, final_h = image.size
+    if final_w != specs['width'] or final_h != specs['height']:
         return json.dumps({
-            "error": f"DALL-E API error: {str(e)}"
+            "error": f"Resize verification failed: got {final_w}x{final_h}, expected {specs['width']}x{specs['height']}"
         })
+    
+    outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+    os.makedirs(outputs_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    mode = "notext" if no_text else "text"
+    filename = f"banner_{banner_type}_{mode}_{timestamp}.png"
+    filepath = os.path.join(outputs_dir, filename)
+    
+    image.save(filepath, quality=95)
+    
+    print(f"✅ Saved: {filename}")
+    print(f"✅ Verified dimensions: {final_w}x{final_h}px")
+    
+    return json.dumps({
+        "success": True,
+        "filename": filename,
+        "filepath": filepath,
+        "dimensions": f"{final_w}x{final_h}",
+        "original_dimensions": f"{orig_w}x{orig_h}",
+        "target_dimensions": f"{specs['width']}x{specs['height']}",
+        "model": "dalle3"
+    })
 
 
 async def validate_banner(
@@ -440,96 +514,77 @@ async def validate_banner(
     message: str,
     cta: str
 ) -> str:
-    """Validate banner using Claude's vision capabilities"""
-    
-    # Check if file exists
-    if not os.path.exists(filepath):
-        return json.dumps({
-            "error": f"File not found: {filepath}"
-        })
+    """
+    BEST VERSION: Validate banner content using Claude Vision API
+    Enhanced prompt for better detection of visual mismatches
+    """
     
     try:
-        # Read the image file
-        with open(filepath, 'rb') as f:
-            image_data = f.read()
-        
-        image_base64 = base64.b64encode(image_data).decode('utf-8')
-        
-        # Use Anthropic API to validate the image
         from anthropic import Anthropic
+        from PIL import Image
+        import base64
+        import os
         
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        if not anthropic_key:
-            return json.dumps({
-                "error": "ANTHROPIC_API_KEY environment variable not set"
-            })
+        if not os.path.exists(filepath):
+            return json.dumps({"error": "File not found"})
         
-        client = Anthropic(api_key=anthropic_key)
+        # Load API key
+        load_api_keys()
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            return json.dumps({"error": "ANTHROPIC_API_KEY not set"})
         
-        validation_prompt = f"""You are an expert banner advertisement validator. Analyze this banner image and validate it against professional standards.
+        # Read and encode image
+        with open(filepath, "rb") as f:
+            image_data = base64.standard_b64encode(f.read()).decode("utf-8")
+        
+        # Get image dimensions
+        image = Image.open(filepath)
+        width, height = image.size
+        
+        # Build ENHANCED validation prompt
+        prompt = f"""Analyze this marketing banner and validate it against the campaign requirements.
 
-EXPECTED CONTENT:
-- Campaign: {campaign_name}
-- Brand: {brand_name}
-- Main Message: {message}
-- Call-to-Action: {cta}
+**Campaign Details:**
+- Brand: "{brand_name}"
+- Message: "{message}"
+- CTA: "{cta}"
+- Banner Type: {width}x{height}px
 
-VALIDATION CRITERIA:
+**Validation Criteria:**
+1. **Brand Visibility (0-10)**: Is the brand name "{brand_name}" clearly visible and prominent?
+2. **Message Clarity (0-10)**: Is the message "{message}" clear and easy to read?
+3. **CTA Effectiveness (0-10)**: Is the call-to-action "{cta}" prominent and actionable?
+4. **Visual Coherence (0-10)**: Does the imagery match the brand/message? (e.g., if brand is "TechStore" selling electronics, does the image show tech products or unrelated content like cars?)
+5. **Design Quality (0-10)**: Overall professional appearance, color contrast, composition
 
-1. BRAND VISIBILITY (1-10): Is there a clear brand name visible and prominent? 
-   - IMPORTANT: The text doesn't need to be exactly "{brand_name}" - similar text, recognizable brand elements, or close matches are acceptable
-   - Focus on: Is there prominent branding? Is it readable? Is it well-positioned?
+**Identify specific issues:**
+- Brand name not visible or wrong
+- Message unclear or missing
+- CTA not prominent
+- Visual mismatch (e.g., car image for tech store, food for electronics, etc.)
+- Poor text contrast/readability
+- Overcrowded or empty layout
 
-2. MESSAGE CLARITY (1-10): Is there a clear main message that's readable?
-   - IMPORTANT: The message doesn't need to match "{message}" word-for-word
-   - Focus on: Is there a clear value proposition? Is the text legible? Does it communicate the offer?
+**IMPORTANT**: Be critical and specific about mismatches between content and imagery. If the imagery doesn't relate to what the brand sells, this is a major issue.
 
-3. CTA EFFECTIVENESS (1-10): Is there a clear call-to-action?
-   - IMPORTANT: The CTA doesn't need to say exactly "{cta}" - similar action words work
-   - Focus on: Is there a prominent button/CTA? Is it actionable? Does it stand out?
-
-4. VISUAL APPEAL (1-10): Is the design eye-catching, modern, and professional?
-   - Focus on: Color scheme, layout, visual hierarchy, professional appearance
-
-5. OVERALL QUALITY (1-10): Overall professional quality for advertising
-   - Focus on: Suitable for digital advertising? High quality? Professional appearance?
-
-TEXT ACCURACY GUIDELINES:
-- Be LENIENT with text matching - AI-generated images often have imperfect text
-- If the brand name is close or recognizable, score it high
-- If the message conveys the right idea even with different words, score it high  
-- If there's a clear CTA button/text with action words, score it high
-- Deduct points only for: completely illegible text, gibberish, or missing elements
-
-SCORING GUIDELINES:
-- 9-10: Excellent, professional quality
-- 7-8: Good, acceptable for advertising (THIS IS THE PASS THRESHOLD)
-- 5-6: Fair, but has issues
-- 1-4: Poor, needs significant improvement
-
-Provide your assessment in this exact JSON format:
+Respond in JSON format:
 {{
-    "passed": true/false,
-    "scores": {{
-        "brand_visibility": X,
-        "message_clarity": X,
-        "cta_effectiveness": X,
-        "visual_appeal": X,
-        "overall_quality": X
-    }},
-    "issues": ["list of specific issues found"],
-    "recommendations": ["list of improvements if failed"],
-    "feedback": "detailed feedback message"
-}}
+    "brand_visibility": <score 0-10>,
+    "message_clarity": <score 0-10>,
+    "cta_effectiveness": <score 0-10>,
+    "visual_coherence": <score 0-10>,
+    "design_quality": <score 0-10>,
+    "issues": ["issue 1", "issue 2", ...],
+    "passed": <true/false - should be false if visual_coherence < 5 or if major visual mismatch>,
+    "summary": "brief overall assessment including any visual mismatches"
+}}"""
 
-PASS if all scores >= 7 and banner has clear branding, message, and CTA.
-FAIL if any score < 7 or critical elements are missing/illegible.
-
-Be reasonable and practical - focus on whether this banner would work for advertising, not whether text matches perfectly."""
-
+        # Call Claude Vision with BEST model
+        client = Anthropic(api_key=api_key)
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
+            model="claude-sonnet-4-20250514",  # Use latest model
+            max_tokens=1024,
             messages=[
                 {
                     "role": "user",
@@ -539,52 +594,56 @@ Be reasonable and practical - focus on whether this banner would work for advert
                             "source": {
                                 "type": "base64",
                                 "media_type": "image/png",
-                                "data": image_base64
-                            }
+                                "data": image_data,
+                            },
                         },
                         {
                             "type": "text",
-                            "text": validation_prompt
+                            "text": prompt
                         }
-                    ]
+                    ],
                 }
-            ]
+            ],
         )
         
-        # Extract the JSON response
-        validation_text = response.content[0].text
+        # Parse response
+        response_text = response.content[0].text
         
-        # Try to extract JSON from the response
+        print("=" * 60)
+        print("CLAUDE VISION VALIDATION RESPONSE:")
+        print(response_text)
+        print("=" * 60)
+        
+        # Extract JSON from response (handle markdown code blocks)
         import re
-        json_match = re.search(r'\{.*\}', validation_text, re.DOTALL)
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
-            validation_result = json.loads(json_match.group())
-            return json.dumps(validation_result, indent=2)
+            validation_result = json.loads(json_match.group(0))
         else:
-            return json.dumps({
-                "passed": False,
-                "scores": {},
-                "issues": ["Could not parse validation response"],
-                "recommendations": ["Please regenerate the banner"],
-                "feedback": validation_text
-            })
-            
+            print(f"ERROR: Could not find JSON in response")
+            return json.dumps({"error": "Failed to parse validation response", "raw_response": response_text})
+        
+        # Add metadata
+        validation_result["dimensions"] = f"{width}x{height}"
+        
+        # Calculate scores dict for compatibility
+        validation_result["scores"] = {
+            "brand_visibility": validation_result.get("brand_visibility", 0),
+            "message_clarity": validation_result.get("message_clarity", 0),
+            "cta_effectiveness": validation_result.get("cta_effectiveness", 0),
+            "visual_coherence": validation_result.get("visual_coherence", 0),
+            "design_quality": validation_result.get("design_quality", 0)
+        }
+        
+        print("FINAL VALIDATION RESULT:")
+        print(json.dumps(validation_result, indent=2))
+        
+        return json.dumps(validation_result)
+        
     except Exception as e:
-        return json.dumps({
-            "error": f"Validation error: {str(e)}"
-        })
-
-
-async def main():
-    """Run the MCP server"""
-    async with stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream,
-            write_stream,
-            app.create_initialization_options()
-        )
+        return json.dumps({"error": str(e)})
 
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
+    pass
