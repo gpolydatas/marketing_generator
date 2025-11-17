@@ -66,6 +66,42 @@ BANNER_SPECS = {
         "description": "Square format",
         "needs_upscale": False
     },
+    # Outernet Screen Types
+    "landing_now": {
+        "width": 1080,
+        "height": 1920,
+        "aspect": "9:16",
+        "description": "Outernet Landing Now - 1080x1920",
+        "needs_upscale": False
+    },
+    "landing_trending": {
+        "width": 1080,
+        "height": 1920,
+        "aspect": "9:16",
+        "description": "Outernet Landing Trending - 1080x1920",
+        "needs_upscale": False
+    },
+    "vista_north": {
+        "width": 1920,
+        "height": 1080,
+        "aspect": "16:9",
+        "description": "Outernet Vista North - 1920x1080",
+        "needs_upscale": False
+    },
+    "vista_west1": {
+        "width": 1080,
+        "height": 1920,
+        "aspect": "9:16",
+        "description": "Outernet Vista West1 - 1080x1920",
+        "needs_upscale": False
+    },
+    "vista_west2": {
+        "width": 1080,
+        "height": 1920,
+        "aspect": "9:16",
+        "description": "Outernet Vista West2 - 1080x1920",
+        "needs_upscale": False
+    },
 }
 
 def load_api_keys():
@@ -375,7 +411,14 @@ CTA: "{cta}" (button)
             
             # Save final image with maximum quality
             mode = "notext" if no_text else "text"
-            filename = f"banner_{banner_type}_{mode}_{timestamp}.png"
+            
+            # Add resolution to filename for Outernet screens
+            outernet_screens = ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2"]
+            if banner_type in outernet_screens:
+                filename = f"banner_{banner_type}_{specs['width']}x{specs['height']}_{mode}_{timestamp}.png"
+            else:
+                filename = f"banner_{banner_type}_{mode}_{timestamp}.png"
+            
             filepath = os.path.join(outputs_dir, filename)
             
             # Save as PNG with no compression for maximum quality
@@ -488,7 +531,14 @@ CTA: "{cta}"
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     mode = "notext" if no_text else "text"
-    filename = f"banner_{banner_type}_{mode}_{timestamp}.png"
+    
+    # Add resolution to filename for Outernet screens
+    outernet_screens = ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2"]
+    if banner_type in outernet_screens:
+        filename = f"banner_{banner_type}_{specs['width']}x{specs['height']}_{mode}_{timestamp}.png"
+    else:
+        filename = f"banner_{banner_type}_{mode}_{timestamp}.png"
+    
     filepath = os.path.join(outputs_dir, filename)
     
     image.save(filepath, quality=95)
@@ -534,13 +584,41 @@ async def validate_banner(
         if not api_key:
             return json.dumps({"error": "ANTHROPIC_API_KEY not set"})
         
-        # Read and encode image
-        with open(filepath, "rb") as f:
-            image_data = base64.standard_b64encode(f.read()).decode("utf-8")
-        
-        # Get image dimensions
+        # Get image dimensions first
         image = Image.open(filepath)
         width, height = image.size
+        
+        # Check file size and compress if needed (Claude API has 5MB limit)
+        file_size = os.path.getsize(filepath)
+        max_size_bytes = 5 * 1024 * 1024  # 5 MB
+        
+        if file_size > max_size_bytes:
+            print(f"⚠️ Image too large ({file_size / 1024 / 1024:.1f}MB), compressing for validation...")
+            
+            # Compress image to fit under 5MB
+            buffer = io.BytesIO()
+            quality = 85
+            
+            # Try different quality levels until we get under 5MB
+            while quality > 20:
+                buffer.seek(0)
+                buffer.truncate()
+                image.save(buffer, format='PNG', optimize=True, quality=quality)
+                compressed_size = buffer.tell()
+                
+                if compressed_size < max_size_bytes:
+                    print(f"✅ Compressed to {compressed_size / 1024 / 1024:.1f}MB at quality {quality}")
+                    break
+                
+                quality -= 10
+            
+            # Use compressed image data
+            buffer.seek(0)
+            image_data = base64.standard_b64encode(buffer.read()).decode("utf-8")
+        else:
+            # Read and encode image normally
+            with open(filepath, "rb") as f:
+                image_data = base64.standard_b64encode(f.read()).decode("utf-8")
         
         # Build ENHANCED validation prompt
         prompt = f"""Analyze this marketing banner and validate it against the campaign requirements.

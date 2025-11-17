@@ -725,9 +725,17 @@ def main():
                 message = st.text_input("Message*", "Up to 70% Off", help="Keep under 8 words")
                 cta = st.text_input("Call to Action*", "Shop Now", help="1-3 words like 'Shop Now'")
             
-            banner_type = st.selectbox("Banner Type*", ["social", "leaderboard", "square", "digital_6_sheet", "mpu", "mobile_banner_300x50", "mobile_banner_320x50"], 
-                                        help="social: 1200×628, leaderboard: 728×90, square: 1024×1024, digital_6_sheet: 1080×1920, mpu: 300×250, mobile_banner_300x50: 300×50, mobile_banner_320x50: 320×50"
-                                       )
+            banner_type = st.selectbox("Banner Type*", [
+                "social", "leaderboard", "square", "digital_6_sheet", "mpu", 
+                "mobile_banner_300x50", "mobile_banner_320x50",
+                "landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2"
+            ], 
+                help="""
+                Standard: social (1200×628), leaderboard (728×90), square (1024×1024), digital_6_sheet (1080×1920), mpu (300×250), mobile banners (300×50, 320×50)
+                
+                Outernet Screens: landing_now (1080×1920), landing_trending (1080×1920), vista_north (1920×1080), vista_west1 (1080×1920), vista_west2 (1080×1920)
+                """
+            )
             # STYLE SETTINGS INSIDE FORM
             st.markdown("##### 🎨 Style Settings")
             col_style1, col_style2 = st.columns(2)
