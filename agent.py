@@ -85,29 +85,62 @@ TOOLS = [
     }
 ]
 
-SYSTEM = """You are a marketing content generation assistant. 
+SYSTEM = """You are a helpful marketing content generation assistant that asks questions to gather information before generating content.
 
-When the user requests content:
-1. Understand what they want (banner, video, animation)
-2. Extract ALL information from their request
-3. Call the appropriate tool with the extracted information
+YOUR ROLE:
+- Have a natural conversation with the user to understand what they want to create
+- Ask questions ONE AT A TIME to gather missing information
+- Only call tools when you have ALL the required information
+- Be friendly and conversational
 
-CRITICAL RULES FOR BANNERS:
-- Default banner_type is "social" (1080x1080) unless user specifies a format
-- If user says "billboard" or "digital 6 sheet" or "1080x1920", use "digital_6_sheet"
-- If user says "leaderboard" or "728x90", use "leaderboard"
-- Put scene descriptions in additional_instructions: "car driving in highway with rainy conditions"
-- Put style keywords in additional_instructions: "hyperrealistic", "photorealistic", "artistic", "cinematic"
-- If user says "use image X and create [hyper realistic] image showing Y", put "hyperrealistic Y" in additional_instructions AND set reference_image_path
-- If no text requested, use empty strings for brand_name, message, cta
-- WEATHER API: When user says "use weather API" or "apply weather conditions", set weather_location to a city name (default: "London")
+REQUIRED INFORMATION FOR BANNERS:
+1. Content type: Banner or Video?
+2. Brand name: What brand/company is this for?
+3. Banner type: What size/format? (social, leaderboard, square, digital_6_sheet, mpu, mobile banners, or Outernet screen types)
+4. Text inclusion: Should the banner include text or be visual-only?
+5. If text is included:
+   - Message: What's the main message?
+   - CTA: What's the call to action?
+6. Weather data: Should we include current weather information?
+7. Additional details: Any specific visual requirements, style, colors, etc.?
 
-CRITICAL RULES FOR VIDEOS:
-- If user says "use image X to create video", call generate_video with input_image_path
-- Extract the COMPLETE description after "where" or "showing" - include location, weather, action, everything
-- Map duration: 4 seconds = short, 6 seconds = standard, 8 seconds = extended
+REQUIRED INFORMATION FOR VIDEOS:
+1. Content type: Banner or Video?
+2. Brand name: What brand/company is this for?
+3. Video duration: Short (4s), standard (6s), or extended (8s)?
+4. Resolution: 720p or 1080p?
+5. Aspect ratio: 16:9, 9:16, or 1:1?
+6. Description: What should happen in the video?
+7. Image-to-video: Do they want to animate an existing image?
 
-NEVER ask for information if you can infer it. Just call the tool with your best interpretation."""
+CONVERSATION FLOW:
+1. When user makes a request, analyze what information is provided
+2. If critical information is missing, ask for it conversationally (one question at a time)
+3. Keep track of what you've learned in the conversation
+4. Only when you have all required information, call the appropriate tool
+5. If the user's request is vague (e.g., "make me a banner"), start by asking what brand/campaign it's for
+
+EXAMPLES OF GOOD QUESTIONS:
+- "What brand or company is this for?"
+- "Would you like a banner or a video?"
+- "What size banner do you need? (social media, billboard, leaderboard, etc.)"
+- "Should this banner include text, or would you prefer a visual-only design?"
+- "What message would you like to convey?"
+- "Would you like me to include current weather information in the design?"
+- "For the video, would you like it to be 4, 6, or 8 seconds long?"
+
+SPECIAL CASES:
+- If user says "use image X to create video", you still need to ask about brand, duration, resolution, aspect ratio, and description
+- If user attaches an image with their prompt, check if it's for reference (banner) or animation (video)
+- Default to 'social' banner type if user doesn't specify
+- Default to 'no weather' unless explicitly requested
+
+REMEMBER:
+- Be conversational and friendly
+- Ask ONE question at a time
+- Don't overwhelm the user with multiple questions
+- Use the conversation history to avoid asking for information already provided
+- Only call tools when you're confident you have all required information"""
 
 class Agent:
     def __init__(self):
@@ -178,7 +211,7 @@ class Agent:
                                 weather_location = tool_input.get('weather_location', 'London')
                                 weather_data = self._fetch_weather(weather_location)
                                 if weather_data:
-                                    print(f"🌤️  Weather: {weather_data['condition']}, {weather_data['temperature']}°C in {weather_location}")
+                                    print(f"🌤️ Weather: {weather_data['condition']}, {weather_data['temperature']}°C in {weather_location}")
                             
                             result = await generate_banner(
                                 campaign_name=tool_input.get('campaign_name', 'Campaign'),
@@ -222,10 +255,10 @@ class Agent:
                                         for issue in val_data.get('issues', []):
                                             response_text += f"• {issue}\n"
                                     
-                                    response_text += f"\n📥 /files/{res['filename']}"
+                                    response_text += f"\n🔥 /files/{res['filename']}"
                                     return response_text
                             
-                            return result if "error" in res else f"✅ Banner created!\n\n📁 {res['filename']}\n📥 /files/{res['filename']}"
+                            return result if "error" in res else f"✅ Banner created!\n\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
                         elif tool_name == "generate_video":
                             result = await generate_video(
                                 campaign_name=tool_input.get('campaign_name', 'Campaign'),
@@ -246,15 +279,18 @@ class Agent:
                         
                         # Format success message
                         if tool_name == "generate_banner":
-                            return f"✅ Banner created!\n\n📁 {res['filename']}\n📥 /files/{res['filename']}"
+                            return f"✅ Banner created!\n\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
                         else:
-                            return f"✅ Video created!\n\n🎬 {tool_input.get('description', '')}\n📁 {res['filename']}\n📥 /files/{res['filename']}"
+                            return f"✅ Video created!\n\n🎬 {tool_input.get('description', '')}\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
             
-            # If no tool call, return text response
+            # If no tool call, return text response (this is where the agent asks questions)
             text_response = ""
             for block in response.content:
                 if hasattr(block, 'text'):
                     text_response += block.text
+            
+            # Update conversation history
+            self.state[sid] = msgs + [{"role": "assistant", "content": response.content}]
             
             return text_response or "What would you like to create?"
             
