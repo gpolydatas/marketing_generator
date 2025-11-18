@@ -102,6 +102,13 @@ BANNER_SPECS = {
         "description": "Outernet Vista West2 - 1080x1920",
         "needs_upscale": False
     },
+    "outernet_now": {
+        "width": 1920,
+        "height": 1080,
+        "aspect": "16:9",
+        "description": "Outernet now - 1920x1080",
+        "needs_upscale": False
+    },
 }
 
 def load_api_keys():
@@ -413,7 +420,7 @@ CTA: "{cta}" (button)
             mode = "notext" if no_text else "text"
             
             # Add resolution to filename for Outernet screens
-            outernet_screens = ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2"]
+            outernet_screens = ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "outernet_now"]
             if banner_type in outernet_screens:
                 filename = f"banner_{banner_type}_{specs['width']}x{specs['height']}_{mode}_{timestamp}.png"
             else:
@@ -533,7 +540,7 @@ CTA: "{cta}"
     mode = "notext" if no_text else "text"
     
     # Add resolution to filename for Outernet screens
-    outernet_screens = ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2"]
+    outernet_screens = ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "outernet_now"]
     if banner_type in outernet_screens:
         filename = f"banner_{banner_type}_{specs['width']}x{specs['height']}_{mode}_{timestamp}.png"
     else:

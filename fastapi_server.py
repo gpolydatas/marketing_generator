@@ -473,7 +473,8 @@ async def get_banner_types():
             "landing_trending": {"width": 1080, "height": 1920, "description": "Outernet Landing Trending - 1080x1920"},
             "vista_north": {"width": 1920, "height": 1080, "description": "Outernet Vista North - 1920x1080"},
             "vista_west1": {"width": 1080, "height": 1920, "description": "Outernet Vista West1 - 1080x1920"},
-            "vista_west2": {"width": 1080, "height": 1920, "description": "Outernet Vista West2 - 1080x1920"}
+            "vista_west2": {"width": 1080, "height": 1920, "description": "Outernet Vista West2 - 1080x1920"},
+            "outernet_now": {"width": 1920, "height": 1080, "description": "Outernet Now - 1920x1080"},
         }
     }
 
