@@ -138,6 +138,10 @@ async def generate_video(
     resolution: str = "720p",
     aspect_ratio: str = "16:9",
     input_image_path: str = "",
+    input_image_path_2: str = "",
+    input_image_path_3: str = "",
+    input_image_path_4: str = "",
+    input_image_path_5: str = "",
     model: str = "veo",
     additional_instructions: str = ""
 ) -> str:

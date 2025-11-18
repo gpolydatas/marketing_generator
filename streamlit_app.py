@@ -1102,14 +1102,58 @@ def main():
                 with col2:
                     v_aspect = st.selectbox("Aspect Ratio*", ["16:9", "9:16"])
                 
-                # IMAGE UPLOAD for image-to-video
-                st.markdown("##### 🎬 Optional: Upload Image to Animate")
-                v_input_image = st.file_uploader(
-                    "Upload an image to animate into video (optional)",
-                    type=['png', 'jpg', 'jpeg'],
-                    help="Upload an image that will be animated with the motion description above",
-                    key="video_input_img"
-                )
+                # IMAGE UPLOAD for image-to-video - UP TO 5 IMAGES
+                st.markdown("##### 🎬 Optional: Upload Images to Animate (Up to 5)")
+                
+                col_v1, col_v2, col_v3 = st.columns(3)
+                with col_v1:
+                    v_input_image_1 = st.file_uploader(
+                        "🖼️ Image 1",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="First image to animate",
+                        key="video_input_img_1"
+                    )
+                with col_v2:
+                    v_input_image_2 = st.file_uploader(
+                        "🖼️ Image 2",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="Second image",
+                        key="video_input_img_2"
+                    )
+                with col_v3:
+                    v_input_image_3 = st.file_uploader(
+                        "🖼️ Image 3",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="Third image",
+                        key="video_input_img_3"
+                    )
+                
+                col_v4, col_v5, col_v_spacer = st.columns(3)
+                with col_v4:
+                    v_input_image_4 = st.file_uploader(
+                        "🖼️ Image 4",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="Fourth image",
+                        key="video_input_img_4"
+                    )
+                with col_v5:
+                    v_input_image_5 = st.file_uploader(
+                        "🖼️ Image 5",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="Fifth image",
+                        key="video_input_img_5"
+                    )
+                
+                # Show count
+                v_uploaded_count = sum([
+                    1 if v_input_image_1 else 0,
+                    1 if v_input_image_2 else 0,
+                    1 if v_input_image_3 else 0,
+                    1 if v_input_image_4 else 0,
+                    1 if v_input_image_5 else 0
+                ])
+                if v_uploaded_count > 0:
+                    st.info(f"✅ {v_uploaded_count} image(s) uploaded for animation")
                 
                 v_submitted = st.form_submit_button("🎬 Generate Video", type="primary", use_container_width=True)
             
@@ -1117,27 +1161,34 @@ def main():
                 if not all([v_campaign, v_brand, v_description]):
                     st.error("Please fill in all required fields")
                 else:
-                    # Save input image if uploaded
-                    v_input_image_path = ""
-                    if v_input_image is not None:
-                        outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-                        if not os.path.exists(outputs_dir):
-                            os.makedirs(outputs_dir)
-                        
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        input_filename = f"video_input_{timestamp}_{v_input_image.name}"
-                        v_input_image_path = os.path.join(outputs_dir, input_filename)
-                        
-                        with open(v_input_image_path, 'wb') as f:
-                            f.write(v_input_image.getbuffer())
-                        
-                        st.info(f"📎 Input image saved: {input_filename}")
-                        st.image(v_input_image_path, caption="Image to animate", width=300)
+                    # Save input images if uploaded
+                    v_input_image_paths = ["", "", "", "", ""]
+                    v_input_images = [v_input_image_1, v_input_image_2, v_input_image_3, v_input_image_4, v_input_image_5]
+                    
+                    for idx, v_img in enumerate(v_input_images):
+                        if v_img is not None:
+                            outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                            if not os.path.exists(outputs_dir):
+                                os.makedirs(outputs_dir)
+                            
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            input_filename = f"video_input_{idx+1}_{timestamp}_{v_img.name}"
+                            v_img_path = os.path.join(outputs_dir, input_filename)
+                            
+                            with open(v_img_path, 'wb') as f:
+                                f.write(v_img.getbuffer())
+                            
+                            v_input_image_paths[idx] = v_img_path
+                            st.info(f"📎 Image {idx+1} saved: {input_filename}")
+                    
+                    # Show first image if uploaded
+                    if v_input_image_paths[0]:
+                        st.image(v_input_image_paths[0], caption="Primary image to animate", width=300)
                     
                     with st.spinner(f"🎬 Generating video with {st.session_state.selected_video_model.upper()}... This takes 1-3 minutes. Please wait..."):
                         result = asyncio.run(generate_video_direct(
                             v_campaign, v_brand, v_type, v_description, v_resolution, v_aspect, 
-                            input_image_path=v_input_image_path,
+                            input_image_path=v_input_image_paths[0],
                             model=st.session_state.selected_video_model
                         ))
                         

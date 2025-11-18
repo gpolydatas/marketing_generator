@@ -48,13 +48,17 @@ TOOLS = [
                 "brand_name": {"type": "string", "description": "Brand/company name (empty string if no text requested)"},
                 "banner_type": {
                     "type": "string",
-                    "enum": ["digital_6_sheet", "leaderboard", "mpu", "mobile_banner_300x50", "mobile_banner_320x50", "social", "square"],
-                    "description": "Banner format. DEFAULT: 'social' (1080x1080) for generic banners. Use digital_6_sheet (1080x1920) ONLY if user says billboard/6-sheet. leaderboard (728x90), mpu (300x250), mobile_banner_300x50, mobile_banner_320x50, square (600x600)"
+                    "enum": ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "now_north", "digital_6_sheet", "leaderboard", "mpu", "mobile_banner_300x50", "mobile_banner_320x50", "social", "square"],
+                    "description": "Banner format. DEFAULT: 'landing_now' (1080x1920 vertical). OUTERNET: landing_now, landing_trending, vista_north (1920x1080), vista_west1, vista_west2, now_north (1920x1080). OTHER: digital_6_sheet, social, square, leaderboard, mpu"
                 },
                 "message": {"type": "string", "description": "Main message (empty string if no text requested)"},
                 "cta": {"type": "string", "description": "Call to action (empty string if no text requested)"},
                 "additional_instructions": {"type": "string", "description": "Scene description and visual requirements. Extract from user request: 'car driving in countryside with sunny conditions', 'rainy atmosphere', 'no text mode', etc. Put the COMPLETE scene description here."},
-                "reference_image_path": {"type": "string", "description": "Path to reference image if user attached one"},
+                "reference_image_path": {"type": "string", "description": "Path to FIRST reference image if user attached one"},
+                "reference_image_path_2": {"type": "string", "description": "Path to SECOND reference image if provided"},
+                "reference_image_path_3": {"type": "string", "description": "Path to THIRD reference image if provided"},
+                "reference_image_path_4": {"type": "string", "description": "Path to FOURTH reference image if provided"},
+                "reference_image_path_5": {"type": "string", "description": "Path to FIFTH reference image if provided"},
                 "weather_location": {"type": "string", "description": "Location for weather API (e.g., 'London', 'New York'). Set this when user says 'use weather API' or 'apply weather conditions'. Default: 'London'"},
                 "model": {"type": "string", "enum": ["imagen4", "imagen4ultra", "dalle3"], "description": "Image generation model. DEFAULT: 'imagen4' (best quality). Use 'dalle3' only if user explicitly asks for DALL-E."}
             },
@@ -77,7 +81,11 @@ TOOLS = [
                 "description": {"type": "string", "description": "COMPLETE scene description including: location, weather, action, camera movement. Extract EVERYTHING after 'where' keyword. Example: 'the car is running through the streets of London in snowy conditions'"},
                 "resolution": {"type": "string", "enum": ["720p", "1080p"], "description": "Video resolution"},
                 "aspect_ratio": {"type": "string", "enum": ["16:9", "9:16", "1:1"], "description": "Aspect ratio"},
-                "input_image_path": {"type": "string", "description": "Path to image to animate (if user attached image and wants to create video from it)"},
+                "input_image_path": {"type": "string", "description": "Path to FIRST image to animate (if user attached images and wants to create video from them)"},
+                "input_image_path_2": {"type": "string", "description": "Path to SECOND image if provided"},
+                "input_image_path_3": {"type": "string", "description": "Path to THIRD image if provided"},
+                "input_image_path_4": {"type": "string", "description": "Path to FOURTH image if provided"},
+                "input_image_path_5": {"type": "string", "description": "Path to FIFTH image if provided"},
                 "model": {"type": "string", "enum": ["veo", "runway"], "description": "Model to use"}
             },
             "required": ["campaign_name", "brand_name", "video_type", "description"]
@@ -178,9 +186,9 @@ class Agent:
         if sid not in self.state:
             self.state[sid] = []
         
-        # Extract attached image
-        img = re.search(r'\[ATTACHED_IMAGE:\s*(.+?)\]', text)
-        img_path = img.group(1) if img else None
+        # Extract attached images (support up to 5)
+        img_matches = re.findall(r'\[ATTACHED_IMAGE:\s*(.+?)\]', text)
+        img_paths = img_matches[:5] if img_matches else []  # Limit to 5 images
         
         # Build messages
         msgs = self.state[sid] + [{"role": "user", "content": text}]
@@ -216,11 +224,15 @@ class Agent:
                             result = await generate_banner(
                                 campaign_name=tool_input.get('campaign_name', 'Campaign'),
                                 brand_name=tool_input.get('brand_name', ''),
-                                banner_type=tool_input.get('banner_type', 'social'),
+                                banner_type=tool_input.get('banner_type', 'landing_now'),
                                 message=tool_input.get('message', ''),
                                 cta=tool_input.get('cta', ''),
                                 additional_instructions=tool_input.get('additional_instructions', ''),
-                                reference_image_path=tool_input.get('reference_image_path', img_path or ''),
+                                reference_image_path=tool_input.get('reference_image_path', img_paths[0] if len(img_paths) > 0 else ''),
+                                reference_image_path_2=tool_input.get('reference_image_path_2', img_paths[1] if len(img_paths) > 1 else ''),
+                                reference_image_path_3=tool_input.get('reference_image_path_3', img_paths[2] if len(img_paths) > 2 else ''),
+                                reference_image_path_4=tool_input.get('reference_image_path_4', img_paths[3] if len(img_paths) > 3 else ''),
+                                reference_image_path_5=tool_input.get('reference_image_path_5', img_paths[4] if len(img_paths) > 4 else ''),
                                 weather_data=weather_data,
                                 model=tool_input.get('model', 'imagen4')
                             )
@@ -267,7 +279,7 @@ class Agent:
                                 description=tool_input.get('description', 'Cinematic movement'),
                                 resolution=tool_input.get('resolution', '720p'),
                                 aspect_ratio=tool_input.get('aspect_ratio', '16:9'),
-                                input_image_path=tool_input.get('input_image_path', img_path or ''),
+                                input_image_path=tool_input.get('input_image_path', img_paths[0] if img_paths else ''),
                                 model=tool_input.get('model', 'veo')
                             )
                         
