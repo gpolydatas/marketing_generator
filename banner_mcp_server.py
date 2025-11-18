@@ -102,14 +102,33 @@ BANNER_SPECS = {
         "description": "Outernet Vista West2 - 1080x1920",
         "needs_upscale": False
     },
+    "now_north": {
+        "width": 1920,
+        "height": 1080,
+        "aspect": "16:9",
+        "description": "Outernet NOW North - 1920x1080, 50fps",
+        "needs_upscale": False,
+        "visual_units": 4,
+        "player_id": "Outernet_Now"
+    },
     "outernet_now": {
         "width": 1920,
         "height": 1080,
         "aspect": "16:9",
-        "description": "Outernet now - 1920x1080",
+        "description": "Outernet now - 1920x1080 (legacy)",
         "needs_upscale": False
     },
 }
+
+OUTERNET_SCREENS = [
+    "landing_now", 
+    "landing_trending", 
+    "vista_north", 
+    "vista_west1", 
+    "vista_west2",
+    "now_north",
+    "outernet_now"
+]
 
 def load_api_keys():
     """Load API keys from secrets file"""
@@ -193,12 +212,16 @@ def resize_to_exact(image: Image.Image, target_w: int, target_h: int) -> Image.I
 
 async def generate_banner(
     campaign_name: str,
-    brand_name: str,
-    banner_type: str,
-    message: str,
-    cta: str,
+    brand_name: str = "",
+    banner_type: str = "landing_now",
+    message: str = "",
+    cta: str = "",
     additional_instructions: str = "",
     reference_image_path: str = "",
+    reference_image_path_2: str = "",
+    reference_image_path_3: str = "",
+    reference_image_path_4: str = "",
+    reference_image_path_5: str = "",
     model: str = "imagen4",
     font_family: str = "Arial",
     primary_color: str = "#FFFFFF",
@@ -216,6 +239,22 @@ async def generate_banner(
         return json.dumps({"error": f"Invalid banner_type '{banner_type}'. Must be one of: {list(BANNER_SPECS.keys())}"})
     
     specs = BANNER_SPECS[banner_type]
+    
+    # Collect all reference images
+    reference_images = []
+    for i, path in enumerate([reference_image_path, reference_image_path_2, 
+                               reference_image_path_3, reference_image_path_4, 
+                               reference_image_path_5], 1):
+        if path and os.path.exists(path):
+            try:
+                img = Image.open(path)
+                reference_images.append(img)
+                print(f"  📸 Reference Image {i}: {os.path.basename(path)} ({img.size[0]}x{img.size[1]})")
+            except Exception as e:
+                print(f"  ⚠️ Could not load reference image {i}: {e}")
+    
+    if reference_images:
+        print(f"  ✅ Loaded {len(reference_images)} reference image(s)\n")
     
     has_scene_description = additional_instructions and len(additional_instructions.strip()) > 10 and "NO TEXT" not in additional_instructions.upper()
     
@@ -244,20 +283,20 @@ async def generate_banner(
     if model.lower() in ["imagen", "imagen4", "imagen-4", "gemini"]:
         return await _generate_with_imagen(
             campaign_name, brand_name, banner_type, message, cta,
-            additional_instructions, reference_image_path, specs,
+            additional_instructions, reference_images, specs,
             no_text, scene_only, weather_scene
         )
     else:
         return await _generate_with_dalle(
             campaign_name, brand_name, banner_type, message, cta,
-            additional_instructions, reference_image_path, specs,
+            additional_instructions, reference_images, specs,
             no_text, scene_only, weather_scene, font_family, primary_color, secondary_color
         )
 
 
 async def _generate_with_imagen(
     campaign_name, brand_name, banner_type, message, cta,
-    additional_instructions, reference_image_path, specs,
+    additional_instructions, reference_images, specs,
     no_text, scene_only, weather_scene
 ) -> str:
     """Generate with Google Imagen 4 - BEST RESIZING VERSION"""
@@ -275,15 +314,22 @@ async def _generate_with_imagen(
     
     client = genai.Client(api_key=api_key)
     
-    # Build prompt (same logic as before)
-    if reference_image_path and os.path.exists(reference_image_path):
-        ref_image = Image.open(reference_image_path)
-        
+    # Build prompt
+    if reference_images:
         if scene_only:
             is_photo = any(word in additional_instructions.lower() for word in ['hyperrealistic', 'photorealistic', 'realistic', 'photograph', 'photo', 'camera'])
             
             if is_photo:
-                prompt = f"""Real photograph. Take the subject from this image and place it in this scene:
+                if len(reference_images) > 1:
+                    prompt = f"""Real photograph. Combine elements from these {len(reference_images)} images and place them in this scene:
+
+{additional_instructions}
+
+{f"Weather: {weather_scene}" if weather_scene else ""}
+
+Natural conditions, motion blur, film grain, authentic photo not CGI"""
+                else:
+                    prompt = f"""Real photograph. Take the subject from this image and place it in this scene:
 
 {additional_instructions}
 
@@ -291,7 +337,16 @@ async def _generate_with_imagen(
 
 Natural conditions, motion blur, film grain, authentic photo not CGI"""
             else:
-                prompt = f"""Using the subject from this image, create this scene:
+                if len(reference_images) > 1:
+                    prompt = f"""Using elements from these {len(reference_images)} images, create this scene:
+
+{additional_instructions}
+
+{f"Weather: {weather_scene}" if weather_scene else ""}
+
+Photorealistic, no text"""
+                else:
+                    prompt = f"""Using the subject from this image, create this scene:
 
 {additional_instructions}
 
@@ -301,16 +356,28 @@ Photorealistic, no text"""
             
             print(f"📝 PROMPT: {prompt[:150]}...")
             
+            contents = [prompt] + reference_images
+            
             response = client.models.generate_content(
                 model="gemini-2.5-flash-image",
-                contents=[prompt, ref_image],
+                contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=['Image'],
                     image_config=types.ImageConfig(aspect_ratio=specs['aspect'])
                 )
             )
         else:
-            prompt = f"""Transform this image into a professional banner.
+            if len(reference_images) > 1:
+                prompt = f"""Transform these {len(reference_images)} images into a professional banner.
+
+Brand: "{brand_name}" (large, bold)
+Message: "{message}" (clear)
+CTA: "{cta}" (button)
+
+{additional_instructions if additional_instructions else ""}
+{f"Weather: {weather_scene}" if weather_scene else ""}"""
+            else:
+                prompt = f"""Transform this image into a professional banner.
 
 Brand: "{brand_name}" (large, bold)
 Message: "{message}" (clear)
@@ -321,9 +388,11 @@ CTA: "{cta}" (button)
             
             print(f"📝 PROMPT: {prompt[:150]}...")
             
+            contents = [prompt] + reference_images
+            
             response = client.models.generate_content(
                 model="gemini-2.5-flash-image",
-                contents=[prompt, ref_image],
+                contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=['Image'],
                     image_config=types.ImageConfig(aspect_ratio=specs['aspect'])
@@ -420,8 +489,7 @@ CTA: "{cta}" (button)
             mode = "notext" if no_text else "text"
             
             # Add resolution to filename for Outernet screens
-            outernet_screens = ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "outernet_now"]
-            if banner_type in outernet_screens:
+            if banner_type in OUTERNET_SCREENS:
                 filename = f"banner_{banner_type}_{specs['width']}x{specs['height']}_{mode}_{timestamp}.png"
             else:
                 filename = f"banner_{banner_type}_{mode}_{timestamp}.png"
@@ -447,7 +515,8 @@ CTA: "{cta}" (button)
                 "dimensions": f"{final_w}x{final_h}",
                 "original_dimensions": f"{orig_w}x{orig_h}",
                 "target_dimensions": f"{specs['width']}x{specs['height']}",
-                "model": "imagen4"
+                "model": "imagen4",
+                "reference_images_used": len(reference_images)
             })
     
     return json.dumps({"error": "No image generated"})
@@ -455,7 +524,7 @@ CTA: "{cta}" (button)
 
 async def _generate_with_dalle(
     campaign_name, brand_name, banner_type, message, cta,
-    additional_instructions, reference_image_path, specs,
+    additional_instructions, reference_images, specs,
     no_text, scene_only, weather_scene, font_family, primary_color, secondary_color
 ) -> str:
     """Generate with DALL-E 3 - uses same BEST resize logic"""
@@ -463,6 +532,9 @@ async def _generate_with_dalle(
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return json.dumps({"error": "OPENAI_API_KEY not set"})
+    
+    if reference_images:
+        return json.dumps({"error": "DALL-E 3 does not support reference images. Use Imagen4 instead."})
     
     print("=" * 60)
     print(f"🎨 USING DALL-E 3")
@@ -540,8 +612,7 @@ CTA: "{cta}"
     mode = "notext" if no_text else "text"
     
     # Add resolution to filename for Outernet screens
-    outernet_screens = ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "outernet_now"]
-    if banner_type in outernet_screens:
+    if banner_type in OUTERNET_SCREENS:
         filename = f"banner_{banner_type}_{specs['width']}x{specs['height']}_{mode}_{timestamp}.png"
     else:
         filename = f"banner_{banner_type}_{mode}_{timestamp}.png"

@@ -813,14 +813,58 @@ def main():
                     💡 **Tip:** Copy and paste these codes into the fields above!
                     """)
             
-            # IMAGE UPLOAD for style reference
-            st.markdown("##### 📎 Optional: Upload Reference Image")
-            reference_image = st.file_uploader(
-                "Upload an image for style inspiration (optional)",
-                type=['png', 'jpg', 'jpeg'],
-                help="Upload a reference image to guide the style, colors, and composition",
-                key="banner_ref_img"
-            )
+            # IMAGE UPLOAD for style reference - UP TO 5 IMAGES
+            st.markdown("##### 📎 Optional: Upload Reference Images (Up to 5)")
+            
+            col_img1, col_img2, col_img3 = st.columns(3)
+            with col_img1:
+                reference_image_1 = st.file_uploader(
+                    "📸 Image 1",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="First reference image",
+                    key="banner_ref_img_1"
+                )
+            with col_img2:
+                reference_image_2 = st.file_uploader(
+                    "📸 Image 2",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Second reference image",
+                    key="banner_ref_img_2"
+                )
+            with col_img3:
+                reference_image_3 = st.file_uploader(
+                    "📸 Image 3",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Third reference image",
+                    key="banner_ref_img_3"
+                )
+            
+            col_img4, col_img5, col_img_spacer = st.columns(3)
+            with col_img4:
+                reference_image_4 = st.file_uploader(
+                    "📸 Image 4",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Fourth reference image",
+                    key="banner_ref_img_4"
+                )
+            with col_img5:
+                reference_image_5 = st.file_uploader(
+                    "📸 Image 5",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Fifth reference image",
+                    key="banner_ref_img_5"
+                )
+            
+            # Show count of uploaded images
+            uploaded_count = sum([
+                1 if reference_image_1 else 0,
+                1 if reference_image_2 else 0,
+                1 if reference_image_3 else 0,
+                1 if reference_image_4 else 0,
+                1 if reference_image_5 else 0
+            ])
+            if uploaded_count > 0:
+                st.info(f"✅ {uploaded_count} image(s) uploaded - All will be combined into the banner")
             
             # WEATHER CONDITIONS SELECTION - NOW INSIDE FORM
             st.markdown("##### 🌤️ Weather Conditions (Optional)")
@@ -885,19 +929,24 @@ def main():
                             st.warning(f"Weather API error: {weather_data['error']}. Generating banner without weather data.")
                             weather_data = None
                 
-                # Save reference image if uploaded
-                reference_image_path = ""
-                if reference_image is not None:
-                    outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-                    if not os.path.exists(outputs_dir):
-                        os.makedirs(outputs_dir)
-                    
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    ref_filename = f"reference_{timestamp}_{reference_image.name}"
-                    reference_image_path = os.path.join(outputs_dir, ref_filename)
-                    
-                    with open(reference_image_path, 'wb') as f:
-                        f.write(reference_image.getbuffer())
+                # Save reference images if uploaded
+                reference_image_paths = ["", "", "", "", ""]
+                reference_images = [reference_image_1, reference_image_2, reference_image_3, reference_image_4, reference_image_5]
+                
+                for idx, ref_img in enumerate(reference_images):
+                    if ref_img is not None:
+                        outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                        if not os.path.exists(outputs_dir):
+                            os.makedirs(outputs_dir)
+                        
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        ref_filename = f"reference_{idx+1}_{timestamp}_{ref_img.name}"
+                        ref_path = os.path.join(outputs_dir, ref_filename)
+                        
+                        with open(ref_path, 'wb') as f:
+                            f.write(ref_img.getbuffer())
+                        
+                        reference_image_paths[idx] = ref_path
                     
                     st.info(f"📎 Reference image saved: {ref_filename}")
                 
@@ -957,7 +1006,11 @@ def main():
                         message=final_message,
                         cta=final_cta,
                         additional_instructions=style_instructions,
-                        reference_image_path=reference_image_path,
+                        reference_image_path=reference_image_paths[0],
+                        reference_image_path_2=reference_image_paths[1],
+                        reference_image_path_3=reference_image_paths[2],
+                        reference_image_path_4=reference_image_paths[3],
+                        reference_image_path_5=reference_image_paths[4],
                         font_family=font_to_use,
                         primary_color=primary_to_use,
                         secondary_color=secondary_to_use,
