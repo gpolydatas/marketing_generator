@@ -630,39 +630,89 @@ def main():
                 help="The agent maintains conversation context - you can ask follow-up questions!"
             )
             
-            # IMAGE UPLOAD for AI agent
-            st.markdown("##### 📎 Optional: Attach Image")
-            agent_image = st.file_uploader(
-                "Upload an image with your prompt",
-                type=['png', 'jpg', 'jpeg'],
-                help="Upload an image for style reference (banner) or to animate (video)",
-                key="agent_upload_img"
-            )
+            # IMAGE UPLOAD for AI agent - UP TO 5 IMAGES
+            st.markdown("##### 📎 Optional: Attach Images (Up to 5)")
+            
+            col_a1, col_a2, col_a3 = st.columns(3)
+            with col_a1:
+                agent_image_1 = st.file_uploader(
+                    "📸 Image 1",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="First image",
+                    key="agent_upload_img_1"
+                )
+            with col_a2:
+                agent_image_2 = st.file_uploader(
+                    "📸 Image 2",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Second image",
+                    key="agent_upload_img_2"
+                )
+            with col_a3:
+                agent_image_3 = st.file_uploader(
+                    "📸 Image 3",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Third image",
+                    key="agent_upload_img_3"
+                )
+            
+            col_a4, col_a5, col_a_spacer = st.columns(3)
+            with col_a4:
+                agent_image_4 = st.file_uploader(
+                    "📸 Image 4",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Fourth image",
+                    key="agent_upload_img_4"
+                )
+            with col_a5:
+                agent_image_5 = st.file_uploader(
+                    "📸 Image 5",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Fifth image",
+                    key="agent_upload_img_5"
+                )
+            
+            # Show count
+            agent_uploaded_count = sum([
+                1 if agent_image_1 else 0,
+                1 if agent_image_2 else 0,
+                1 if agent_image_3 else 0,
+                1 if agent_image_4 else 0,
+                1 if agent_image_5 else 0
+            ])
+            if agent_uploaded_count > 0:
+                st.info(f"✅ {agent_uploaded_count} image(s) will be attached to your message")
             
             prompt_submit = st.form_submit_button("💬 Send Message", type="primary", use_container_width=True)
         
         if prompt_submit and user_prompt:
             st.markdown("---")
             
-            # Save uploaded image if provided
-            agent_image_path = ""
-            if agent_image is not None:
-                outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-                if not os.path.exists(outputs_dir):
-                    os.makedirs(outputs_dir)
-                
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                agent_img_filename = f"agent_upload_{timestamp}_{agent_image.name}"
-                agent_image_path = os.path.join(outputs_dir, agent_img_filename)
-                
-                with open(agent_image_path, 'wb') as f:
-                    f.write(agent_image.getbuffer())
-                
-                st.info(f"📎 Image attached: {agent_img_filename}")
-                st.image(agent_image_path, caption="Attached image", width=300)
-                
-                # Add image path to prompt context
-                user_prompt += f"\n\n[ATTACHED_IMAGE: {agent_image_path}]"
+            # Save uploaded images if provided
+            agent_image_paths = []
+            agent_images = [agent_image_1, agent_image_2, agent_image_3, agent_image_4, agent_image_5]
+            
+            for idx, agent_img in enumerate(agent_images, 1):
+                if agent_img is not None:
+                    outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                    if not os.path.exists(outputs_dir):
+                        os.makedirs(outputs_dir)
+                    
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    agent_img_filename = f"agent_upload_{idx}_{timestamp}_{agent_img.name}"
+                    agent_img_path = os.path.join(outputs_dir, agent_img_filename)
+                    
+                    with open(agent_img_path, 'wb') as f:
+                        f.write(agent_img.getbuffer())
+                    
+                    agent_image_paths.append(agent_img_path)
+                    st.info(f"📎 Image {idx} attached: {agent_img_filename}")
+                    st.image(agent_img_path, caption=f"Image {idx}", width=200)
+            
+            # Add all image paths to prompt context
+            if agent_image_paths:
+                for img_path in agent_image_paths:
+                    user_prompt += f"\n[ATTACHED_IMAGE: {img_path}]"
             
             try:
                 from agent import run_single_prompt
