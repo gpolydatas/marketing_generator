@@ -997,9 +997,7 @@ def main():
                             f.write(ref_img.getbuffer())
                         
                         reference_image_paths[idx] = ref_path
-                    
-                    st.info(f"📎 Reference image saved: {ref_filename}")
-                
+                        st.info(f"📎 Reference image saved: {ref_filename}")
                 # Use form's font and colors
                 font_to_use = global_font if global_font != 'Default' else 'Arial'
                 primary_to_use = global_primary if global_color_mode == 'Custom' and global_primary else '#FFFFFF'
