@@ -110,6 +110,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# VIDEO FORMAT SPECIFICATIONS
+VIDEO_FORMATS = {
+    "instagram_story": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Instagram/Facebook Story (vertical)"},
+    "instagram_feed": {"aspect_ratio": "1:1", "resolution": "1080p", "width": 1080, "height": 1080, "description": "Instagram Feed Post (square)"},
+    "instagram_reels": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Instagram Reels (vertical)"},
+    "tiktok": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "TikTok Video (vertical)"},
+    "youtube_video": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "YouTube Video (horizontal)"},
+    "youtube_short": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "YouTube Shorts (vertical)"},
+    "twitter_post": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1280, "height": 720, "description": "Twitter/X Post"},
+    "linkedin_post": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1280, "height": 720, "description": "LinkedIn Post"},
+    "mobile_vertical": {"aspect_ratio": "9:16", "resolution": "720p", "width": 720, "height": 1280, "description": "Mobile phone (vertical)"},
+    "mobile_horizontal": {"aspect_ratio": "16:9", "resolution": "720p", "width": 1280, "height": 720, "description": "Mobile phone (horizontal)"},
+    "tablet": {"aspect_ratio": "4:3", "resolution": "1080p", "width": 1440, "height": 1080, "description": "Tablet (iPad-style)"},
+    "desktop": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Desktop/Laptop"},
+    "landing_now": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Outernet Landing Now - 1080x1920"},
+    "landing_trending": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Outernet Landing Trending - 1080x1920"},
+    "vista_north": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Outernet Vista North - 1920x1080"},
+    "vista_west1": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Outernet Vista West1 - 1080x1920"},
+    "vista_west2": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Outernet Vista West2 - 1080x1920"},
+    "now_north": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Outernet NOW North - 1920x1080"},
+    "outernet_now": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Outernet Now - 1920x1080"},
+    "standard_16_9": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Standard 16:9 landscape"},
+    "standard_9_16": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Standard 9:16 portrait"},
+    "square": {"aspect_ratio": "1:1", "resolution": "1080p", "width": 1080, "height": 1080, "description": "Square 1:1 format"}
+}
+
+VIDEO_FORMAT_CATEGORIES = {
+    "🎬 Social Media": ["instagram_story", "instagram_feed", "instagram_reels", "tiktok", "youtube_video", "youtube_short", "twitter_post", "linkedin_post"],
+    "📱 Device-Optimized": ["mobile_vertical", "mobile_horizontal", "tablet", "desktop"],
+    "🏢 Outernet Screens": ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "now_north", "outernet_now"],
+    "📐 Standard Formats": ["standard_16_9", "standard_9_16", "square"]
+}
+
 # Initialize session state
 if 'generation_log' not in st.session_state:
     st.session_state.generation_log = []
@@ -1146,11 +1179,50 @@ def main():
                     help="Describe visuals, camera movements, and audio",
                     height=100)
                 
+                st.markdown("---")
+                st.markdown("##### 📺 Outernet Screen Selection")
+                st.caption("Choose which Outernet screen this video will be displayed on")
+                
+                # Direct screen format selection - NO CATEGORIES
+                screen_format = st.selectbox(
+                    "Outernet Screen*",
+                    options=["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "now_north", "outernet_now"],
+                    format_func=lambda x: f"{x} - {VIDEO_FORMATS[x]['description']}",
+                    help="Select the specific Outernet screen"
+                )
+                
+                # Display format specifications
+                if screen_format:
+                    specs = VIDEO_FORMATS[screen_format]
+                    st.markdown(f"""
+                    <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea; margin: 10px 0;">
+                        <b>📐 Format Specifications:</b><br>
+                        • <b>Dimensions:</b> {specs['width']}x{specs['height']}px<br>
+                        • <b>Aspect Ratio:</b> {specs['aspect_ratio']}<br>
+                        • <b>Resolution:</b> {specs['resolution']}<br>
+                        • <b>Description:</b> {specs['description']}
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                st.markdown("##### ⚙️ Advanced Settings (Optional)")
+                
                 col1, col2 = st.columns(2)
                 with col1:
-                    v_resolution = st.selectbox("Resolution*", ["720p", "1080p"])
+                    # Resolution override (optional)
+                    override_resolution = st.checkbox("Override Resolution", value=False)
+                    if override_resolution:
+                        v_resolution = st.selectbox("Custom Resolution", ["720p", "1080p"], key="v_res_override")
+                    else:
+                        v_resolution = ""  # Use format default
+                
                 with col2:
-                    v_aspect = st.selectbox("Aspect Ratio*", ["16:9", "9:16"])
+                    # Aspect ratio override (optional)
+                    override_aspect = st.checkbox("Override Aspect Ratio", value=False)
+                    if override_aspect:
+                        v_aspect = st.selectbox("Custom Aspect Ratio", ["16:9", "9:16", "1:1", "4:3"], key="v_asp_override")
+                    else:
+                        v_aspect = ""  # Use format default
                 
                 # IMAGE UPLOAD for image-to-video - UP TO 5 IMAGES
                 st.markdown("##### 🎬 Optional: Upload Images to Animate (Up to 5)")
@@ -1208,7 +1280,7 @@ def main():
                 v_submitted = st.form_submit_button("🎬 Generate Video", type="primary", use_container_width=True)
             
             if v_submitted:
-                if not all([v_campaign, v_brand, v_description]):
+                if not all([v_campaign, v_brand, v_description, screen_format]):
                     st.error("Please fill in all required fields")
                 else:
                     # Save input images if uploaded
@@ -1235,25 +1307,46 @@ def main():
                     if v_input_image_paths[0]:
                         st.image(v_input_image_paths[0], caption="Primary image to animate", width=300)
                     
+                    # Get format specs
+                    format_specs = VIDEO_FORMATS[screen_format]
+                    final_resolution = v_resolution if v_resolution else format_specs["resolution"]
+                    final_aspect = v_aspect if v_aspect else format_specs["aspect_ratio"]
+                    
+                    st.info(f"🎯 Generating for: {format_specs['description']} ({format_specs['width']}x{format_specs['height']})")
+                    
                     with st.spinner(f"🎬 Generating video with {st.session_state.selected_video_model.upper()}... This takes 1-3 minutes. Please wait..."):
-                        result = asyncio.run(generate_video_direct(
-                            v_campaign, v_brand, v_type, v_description, v_resolution, v_aspect, 
-                            input_image_path=v_input_image_paths[0],
-                            model=st.session_state.selected_video_model
-                        ))
+                        try:
+                            from video_mcp_server import generate_video
+                            
+                            result_json = asyncio.run(generate_video(
+                                campaign_name=v_campaign,
+                                brand_name=v_brand,
+                                video_type=v_type,
+                                description=v_description,
+                                resolution=final_resolution,
+                                aspect_ratio=final_aspect,
+                                input_image_path=v_input_image_paths[0],
+                                model=st.session_state.selected_video_model
+                            ))
+                            
+                            result = json.loads(result_json)
+                            
+                            if "error" in result:
+                                st.error(f"❌ Error: {result['error']}")
+                            elif result.get("success"):
+                                st.success(f"✅ Video generated: {result['filename']}")
+                                st.info(f"📺 Format: {format_specs['description']}")
+                                st.info(f"📐 Resolution: {final_resolution} • Aspect Ratio: {final_aspect}")
+                                
+                                st.markdown("### 📦 Preview")
+                                filepath = result['filepath']
+                                metadata = load_metadata(filepath)
+                                display_video(filepath, metadata, key_suffix="create_preview")
+                                
+                                st.info("💡 Switch to Gallery tab to see all your content!")
                         
-                        if "error" in result:
-                            st.error(f"❌ Error: {result['error']}")
-                        elif result.get("success"):
-                            st.success(f"✅ Video generated: {result['filename']}")
-                            st.info("ℹ️ Please review the video manually")
-                            
-                            st.markdown("### 📦 Preview")
-                            filepath = result['filepath']
-                            metadata = load_metadata(filepath)
-                            display_video(filepath, metadata, key_suffix="create_preview")
-                            
-                            st.info("💡 Switch to Gallery tab to see all your content!")
+                        except Exception as e:
+                            st.error(f"❌ Error generating video: {str(e)}")
         
         st.markdown("---")
         
