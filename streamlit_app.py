@@ -1030,8 +1030,9 @@ def main():
                             f.write(ref_img.getbuffer())
                         
                         reference_image_paths[idx] = ref_path
-                    
-                    st.info(f"📎 Reference image saved: {ref_filename}")
+                        
+                        # FIXED: st.info now inside the if block
+                        st.info(f"📎 Reference image saved: {ref_filename}")
                 
                 # Use form's font and colors
                 font_to_use = global_font if global_font != 'Default' else 'Arial'
@@ -1160,7 +1161,6 @@ def main():
                         display_banner(filepath, metadata, key_suffix="create_preview")
                         
                         st.info("💡 Switch to Gallery tab to see all your content!")
-        
         
         # VIDEO CREATION
         with col_video:
