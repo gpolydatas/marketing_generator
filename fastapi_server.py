@@ -1,3 +1,5 @@
+# /home/gpoly/Downloads/poc_eng/fastapi_server.py
+
 #!/usr/bin/env python3
 """
 SECURED FastAPI Server for Marketing Content Generation
@@ -221,6 +223,7 @@ class VideoRequest(BaseModel):
     description: str
     resolution: str = "1080p"
     aspect_ratio: str = "16:9"
+    screen_format: str = ""
     model: str = "veo"
 
 class AgentRequest(BaseModel):
@@ -405,6 +408,7 @@ async def generate_video_endpoint(
             description=request.description,
             resolution=request.resolution,
             aspect_ratio=request.aspect_ratio,
+            screen_format=request.screen_format,
             input_image_path="",
             model=request.model
         )
