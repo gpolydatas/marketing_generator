@@ -81,6 +81,7 @@ TOOLS = [
                 "description": {"type": "string", "description": "COMPLETE scene description including: location, weather, action, camera movement. Extract EVERYTHING after 'where' keyword. Example: 'the car is running through the streets of London in snowy conditions'"},
                 "resolution": {"type": "string", "enum": ["720p", "1080p"], "description": "Video resolution"},
                 "aspect_ratio": {"type": "string", "enum": ["16:9", "9:16", "1:1"], "description": "Aspect ratio"},
+                "screen_format": {"type": "string", "description": "Screen format name (e.g., 'vista_north', 'landing_now', 'social'). Extract from user's request. Will be included in filename."},
                 "input_image_path": {"type": "string", "description": "Path to FIRST image to animate (if user attached images and wants to create video from them)"},
                 "input_image_path_2": {"type": "string", "description": "Path to SECOND image if provided"},
                 "input_image_path_3": {"type": "string", "description": "Path to THIRD image if provided"},
@@ -279,6 +280,7 @@ class Agent:
                                 description=tool_input.get('description', 'Cinematic movement'),
                                 resolution=tool_input.get('resolution', '720p'),
                                 aspect_ratio=tool_input.get('aspect_ratio', '16:9'),
+                                screen_format=tool_input.get('screen_format', ''),
                                 input_image_path=tool_input.get('input_image_path', img_paths[0] if img_paths else ''),
                                 model=tool_input.get('model', 'veo')
                             )
