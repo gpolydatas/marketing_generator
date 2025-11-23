@@ -176,6 +176,7 @@ app = FastAPI(
     title="Marketing Content Generator API (Secured)",
     description="Generate banners and videos for marketing campaigns with AI - API Key Required",
     version="2.0.0",
+    openapi_version="3.1.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
