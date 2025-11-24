@@ -17,6 +17,6 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd /opt/marketing-api
-          sudo git pull origin main
+          git pull origin main
           sudo systemctl restart marketing-api
           sudo systemctl restart streamlit
