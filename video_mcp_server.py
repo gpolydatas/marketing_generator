@@ -14,6 +14,7 @@ from google.genai import types
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 from mcp.server.stdio import stdio_server
+from video_validation import validate_video_with_claude
 
 # Video specifications
 VIDEO_SPECS = {
@@ -622,40 +623,13 @@ async def validate_video(
     brand_name: str,
     description: str
 ) -> str:
-    """Validate video - simplified validation"""
-    
-    # Check if file exists
-    if not os.path.exists(filepath):
-        return json.dumps({
-            "error": f"File not found: {filepath}"
-        })
-    
-    try:
-        # Get file info
-        file_size = os.path.getsize(filepath) / 1024 / 1024
-        
-        # Simplified validation (video analysis is complex)
-        validation_result = {
-            "passed": True,
-            "scores": {
-                "visual_quality": 8,
-                "brand_presence": 7,
-                "content_relevance": 8,
-                "production_value": 8,
-                "overall_quality": 8
-            },
-            "issues": [],
-            "recommendations": [],
-            "feedback": f"Video generated successfully. File size: {file_size:.2f}MB. Basic validation passed. Review the video manually for final approval."
-        }
-        
-        return json.dumps(validation_result, indent=2)
-            
-    except Exception as e:
-        return json.dumps({
-            "error": f"Validation error: {str(e)}"
-        })
-
+    """Validate video using Claude Vision API"""
+    return await validate_video_with_claude(
+        filepath,
+        campaign_name,
+        brand_name,
+        description
+    )
 
 async def main():
     """Run the MCP server"""

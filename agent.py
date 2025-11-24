@@ -272,6 +272,7 @@ class Agent:
                                     return response_text
                             
                             return result if "error" in res else f"✅ Banner created!\n\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
+                        
                         elif tool_name == "generate_video":
                             result = await generate_video(
                                 campaign_name=tool_input.get('campaign_name', 'Campaign'),
@@ -284,17 +285,46 @@ class Agent:
                                 input_image_path=tool_input.get('input_image_path', img_paths[0] if img_paths else ''),
                                 model=tool_input.get('model', 'veo')
                             )
-                        
-                        # Parse result
-                        res = json.loads(result)
-                        
-                        if "error" in res:
-                            return f"❌ Error: {res['error']}"
-                        
-                        # Format success message
-                        if tool_name == "generate_banner":
-                            return f"✅ Banner created!\n\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
-                        else:
+                            
+                            # Parse result
+                            res = json.loads(result)
+                            
+                            # Run validation if video was generated successfully
+                            if "error" not in res and res.get('success'):
+                                # Run validation
+                                from video_validation import validate_video_with_claude
+                                val_result_json = await validate_video_with_claude(
+                                    filepath=res['filepath'],
+                                    campaign_name=tool_input.get('campaign_name'),
+                                    brand_name=tool_input.get('brand_name'),
+                                    description=tool_input.get('description')
+                                )
+                                val_data = json.loads(val_result_json)
+                                
+                                # Add validation to response
+                                response_text = f"✅ Video created!\n\n"
+                                response_text += f"🎬 {tool_input.get('description', '')}\n"
+                                response_text += f"📁 {res['filename']}\n"
+                                
+                                if val_data.get('passed'):
+                                    response_text += f"✅ Validation PASSED (Score: {val_data.get('overall_score')}/10)\n"
+                                    scores = val_data.get('scores', {})
+                                    response_text += f"Scores: Visual {scores.get('visual_quality', 0)}/10, "
+                                    response_text += f"Brand {scores.get('brand_presence', 0)}/10, "
+                                    response_text += f"Content {scores.get('content_relevance', 0)}/10\n"
+                                else:
+                                    response_text += "⚠️ Validation Issues Detected:\n"
+                                    for issue in val_data.get('issues', []):
+                                        response_text += f"• {issue}\n"
+                                
+                                response_text += f"\n🔥 /files/{res['filename']}"
+                                return response_text
+                            
+                            # If there was an error
+                            if "error" in res:
+                                return f"❌ Error: {res['error']}"
+                            
+                            # Fallback response
                             return f"✅ Video created!\n\n🎬 {tool_input.get('description', '')}\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
             
             # If no tool call, return text response (this is where the agent asks questions)

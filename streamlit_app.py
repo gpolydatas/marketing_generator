@@ -81,6 +81,7 @@ def load_api_keys():
         print(f"⚠️  Secrets file not found: {secrets_path}")
         print("⚠️  Will use environment variables instead")
         return False
+
 # Load keys on startup
 load_api_keys()
 
@@ -429,114 +430,6 @@ async def generate_video_direct(campaign_name, brand_name, video_type, descripti
         return result
     except Exception as e:
         return {"error": str(e)}
-
-def fetch_weather(location):
-    """Fetch weather data from API"""
-    import requests
-    try:
-        # Using Open-Meteo API (free, no key needed)
-        # First get coordinates for location
-        geocode_url = f"https://geocoding-api.open-meteo.com/v1/search?name={location}&count=1"
-        geo_response = requests.get(geocode_url, timeout=10)
-        geo_data = geo_response.json()
-        
-        if not geo_data.get('results'):
-            return {"error": f"Location '{location}' not found"}
-        
-        lat = geo_data['results'][0]['latitude']
-        lon = geo_data['results'][0]['longitude']
-        
-        # Get weather data
-        weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto"
-        weather_response = requests.get(weather_url, timeout=10)
-        weather_data = weather_response.json()
-        
-        current = weather_data['current']
-        
-        # Map weather codes to conditions
-        weather_codes = {
-            0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-            45: "Foggy", 48: "Foggy", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
-            61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow",
-            77: "Snow grains", 80: "Light showers", 81: "Showers", 82: "Heavy showers",
-            85: "Light snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Heavy thunderstorm"
-        }
-        
-        condition = weather_codes.get(current['weather_code'], "Unknown")
-        
-        return {
-            "location": location,
-            "temperature": current['temperature_2m'],
-            "condition": condition,
-            "wind_speed": current['wind_speed_10m'],
-            "weather_code": current['weather_code']
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-async def generate_weather_banner(weather_data, font_family="Arial", primary_color="#1E90FF", secondary_color="#FFFFFF"):
-    """Generate a banner based on weather conditions"""
-    temp = weather_data['temperature']
-    condition = weather_data['condition']
-    location = weather_data['location']
-    
-    # Create weather-appropriate message
-    if "rain" in condition.lower() or "drizzle" in condition.lower():
-        message = f"Rainy Day in {location}"
-        emoji = "🌧️"
-    elif "snow" in condition.lower():
-        message = f"Snowy Day in {location}"
-        emoji = "❄️"
-    elif "thunder" in condition.lower():
-        message = f"Stormy Weather in {location}"
-        emoji = "⛈️"
-    elif "clear" in condition.lower():
-        message = f"Sunny Day in {location}"
-        emoji = "☀️"
-    elif "cloud" in condition.lower():
-        message = f"Cloudy Day in {location}"
-        emoji = "☁️"
-    elif "fog" in condition.lower():
-        message = f"Foggy Day in {location}"
-        emoji = "🌫️"
-    else:
-        message = f"Weather in {location}"
-        emoji = "🌤️"
-    
-    # Generate banner with weather info
-    campaign_name = f"Weather Update {datetime.now().strftime('%H:%M')}"
-    brand_name = f"{emoji} Weather"
-    cta = f"{int(temp)}°C"
-    
-    # Add font and color instructions to additional_instructions
-    style_instructions = f"""
-FONT STYLING:
-- Use {font_family} font family or similar sans-serif font
-- Make text bold and clear
-
-COLOR SCHEME:
-- Primary color: {primary_color} (use for main elements and background accents)
-- Secondary color: {secondary_color} (use for text or contrast)
-- Create a harmonious color palette based on these colors
-- Ensure high contrast for readability
-
-WEATHER THEME:
-- Reflect the weather condition: {condition}
-- Use weather-appropriate imagery and mood
-"""
-    
-    from banner_mcp_server import generate_banner
-    
-    result_json = await generate_banner(
-        campaign_name=campaign_name,
-        brand_name=brand_name,
-        banner_type="social",
-        message=message,
-        cta=cta,
-        additional_instructions=style_instructions
-    )
-    
-    return json.loads(result_json)
 
 def check_weather_automation():
     """Check if weather automation should run"""
@@ -1334,16 +1227,85 @@ def main():
                             if "error" in result:
                                 st.error(f"❌ Error: {result['error']}")
                             elif result.get("success"):
-                                st.success(f"✅ Video generated: {result['filename']}")
-                                st.info(f"📺 Format: {format_specs['description']}")
-                                st.info(f"📐 Resolution: {final_resolution} • Aspect Ratio: {final_aspect}")
+                                    st.success(f"✅ Video generated: {result['filename']}")
+    
+                            # RUN VALIDATION
+                            with st.spinner("🔍 Validating video quality..."):
+                                from video_validation import validate_video_with_claude
                                 
-                                st.markdown("### 📦 Preview")
-                                filepath = result['filepath']
-                                metadata = load_metadata(filepath)
-                                display_video(filepath, metadata, key_suffix="create_preview")
+                                val_result_json = asyncio.run(validate_video_with_claude(
+                                    filepath=result['filepath'],
+                                    campaign_name=v_campaign,
+                                    brand_name=v_brand,
+                                    description=v_description
+                                ))
                                 
-                                st.info("💡 Switch to Gallery tab to see all your content!")
+                                val_result = json.loads(val_result_json)
+                                
+                                if "error" not in val_result:
+                                    if val_result.get("passed"):
+                                        st.success("✅ Video Validation PASSED!")
+                                        overall = val_result.get('overall_score', 0)
+                                        st.metric("Overall Quality Score", f"{overall}/10")
+                                        
+                                        # Show detailed scores
+                                        with st.expander("📊 Detailed Scores"):
+                                            scores = val_result.get('scores', {})
+                                            col1, col2, col3 = st.columns(3)
+                                            
+                                            with col1:
+                                                st.metric("Visual Quality", f"{scores.get('visual_quality', 0)}/10")
+                                                st.metric("Brand Presence", f"{scores.get('brand_presence', 0)}/10")
+                                            
+                                            with col2:
+                                                st.metric("Content Match", f"{scores.get('content_relevance', 0)}/10")
+                                                st.metric("Motion Quality", f"{scores.get('motion_quality', 0)}/10")
+                                            
+                                            with col3:
+                                                st.metric("Production Value", f"{scores.get('production_value', 0)}/10")
+                                                st.metric("Storytelling", f"{scores.get('storytelling', 0)}/10")
+                                        
+                                        # Show strengths
+                                        strengths = val_result.get('strengths', [])
+                                        if strengths:
+                                            st.markdown("**✨ Strengths:**")
+                                            for strength in strengths:
+                                                st.write(f"• {strength}")
+                                    
+                                    else:
+                                        st.warning("⚠️ Video validation issues detected")
+                                        
+                                        overall = val_result.get('overall_score', 0)
+                                        st.metric("Overall Quality Score", f"{overall}/10")
+                                        
+                                        # Show scores
+                                        scores = val_result.get('scores', {})
+                                        col1, col2, col3 = st.columns(3)
+                                        
+                                        with col1:
+                                            st.metric("Visual Quality", f"{scores.get('visual_quality', 0)}/10")
+                                            st.metric("Brand Presence", f"{scores.get('brand_presence', 0)}/10")
+                                        
+                                        with col2:
+                                            st.metric("Content Match", f"{scores.get('content_relevance', 0)}/10")
+                                            st.metric("Motion Quality", f"{scores.get('motion_quality', 0)}/10")
+                                        
+                                        with col3:
+                                            st.metric("Production Value", f"{scores.get('production_value', 0)}/10")
+                                            st.metric("Storytelling", f"{scores.get('storytelling', 0)}/10")
+                                        
+                                        # Show issues
+                                        issues = val_result.get('issues', [])
+                                        if issues:
+                                            st.markdown("**⚠️ Issues:**")
+                                            for issue in issues:
+                                                st.write(f"• {issue}")
+                                        
+                                        # Show summary
+                                        if val_result.get('summary'):
+                                            st.info(val_result['summary'])
+                                else:
+                                    st.error(f"Validation error: {val_result['error']}")
                         
                         except Exception as e:
                             st.error(f"❌ Error generating video: {str(e)}")
