@@ -48,13 +48,17 @@ TOOLS = [
                 "brand_name": {"type": "string", "description": "Brand/company name (empty string if no text requested)"},
                 "banner_type": {
                     "type": "string",
-                    "enum": ["digital_6_sheet", "leaderboard", "mpu", "mobile_banner_300x50", "mobile_banner_320x50", "social", "square"],
-                    "description": "Banner format. DEFAULT: 'social' (1080x1080) for generic banners. Use digital_6_sheet (1080x1920) ONLY if user says billboard/6-sheet. leaderboard (728x90), mpu (300x250), mobile_banner_300x50, mobile_banner_320x50, square (600x600)"
+                    "enum": ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "now_north", "digital_6_sheet", "leaderboard", "mpu", "mobile_banner_300x50", "mobile_banner_320x50", "social", "square"],
+                    "description": "Banner format. DEFAULT: 'landing_now' (1080x1920 vertical). OUTERNET: landing_now, landing_trending, vista_north (1920x1080), vista_west1, vista_west2, now_north (1920x1080). OTHER: digital_6_sheet, social, square, leaderboard, mpu"
                 },
                 "message": {"type": "string", "description": "Main message (empty string if no text requested)"},
                 "cta": {"type": "string", "description": "Call to action (empty string if no text requested)"},
                 "additional_instructions": {"type": "string", "description": "Scene description and visual requirements. Extract from user request: 'car driving in countryside with sunny conditions', 'rainy atmosphere', 'no text mode', etc. Put the COMPLETE scene description here."},
-                "reference_image_path": {"type": "string", "description": "Path to reference image if user attached one"},
+                "reference_image_path": {"type": "string", "description": "Path to FIRST reference image if user attached one"},
+                "reference_image_path_2": {"type": "string", "description": "Path to SECOND reference image if provided"},
+                "reference_image_path_3": {"type": "string", "description": "Path to THIRD reference image if provided"},
+                "reference_image_path_4": {"type": "string", "description": "Path to FOURTH reference image if provided"},
+                "reference_image_path_5": {"type": "string", "description": "Path to FIFTH reference image if provided"},
                 "weather_location": {"type": "string", "description": "Location for weather API (e.g., 'London', 'New York'). Set this when user says 'use weather API' or 'apply weather conditions'. Default: 'London'"},
                 "model": {"type": "string", "enum": ["imagen4", "imagen4ultra", "dalle3"], "description": "Image generation model. DEFAULT: 'imagen4' (best quality). Use 'dalle3' only if user explicitly asks for DALL-E."}
             },
@@ -77,7 +81,12 @@ TOOLS = [
                 "description": {"type": "string", "description": "COMPLETE scene description including: location, weather, action, camera movement. Extract EVERYTHING after 'where' keyword. Example: 'the car is running through the streets of London in snowy conditions'"},
                 "resolution": {"type": "string", "enum": ["720p", "1080p"], "description": "Video resolution"},
                 "aspect_ratio": {"type": "string", "enum": ["16:9", "9:16", "1:1"], "description": "Aspect ratio"},
-                "input_image_path": {"type": "string", "description": "Path to image to animate (if user attached image and wants to create video from it)"},
+                "screen_format": {"type": "string", "description": "Screen format name (e.g., 'vista_north', 'landing_now', 'social'). Extract from user's request. Will be included in filename."},
+                "input_image_path": {"type": "string", "description": "Path to FIRST image to animate (if user attached images and wants to create video from them)"},
+                "input_image_path_2": {"type": "string", "description": "Path to SECOND image if provided"},
+                "input_image_path_3": {"type": "string", "description": "Path to THIRD image if provided"},
+                "input_image_path_4": {"type": "string", "description": "Path to FOURTH image if provided"},
+                "input_image_path_5": {"type": "string", "description": "Path to FIFTH image if provided"},
                 "model": {"type": "string", "enum": ["veo", "runway"], "description": "Model to use"}
             },
             "required": ["campaign_name", "brand_name", "video_type", "description"]
@@ -85,29 +94,62 @@ TOOLS = [
     }
 ]
 
-SYSTEM = """You are a marketing content generation assistant. 
+SYSTEM = """You are a helpful marketing content generation assistant that asks questions to gather information before generating content.
 
-When the user requests content:
-1. Understand what they want (banner, video, animation)
-2. Extract ALL information from their request
-3. Call the appropriate tool with the extracted information
+YOUR ROLE:
+- Have a natural conversation with the user to understand what they want to create
+- Ask questions ONE AT A TIME to gather missing information
+- Only call tools when you have ALL the required information
+- Be friendly and conversational
 
-CRITICAL RULES FOR BANNERS:
-- Default banner_type is "social" (1080x1080) unless user specifies a format
-- If user says "billboard" or "digital 6 sheet" or "1080x1920", use "digital_6_sheet"
-- If user says "leaderboard" or "728x90", use "leaderboard"
-- Put scene descriptions in additional_instructions: "car driving in highway with rainy conditions"
-- Put style keywords in additional_instructions: "hyperrealistic", "photorealistic", "artistic", "cinematic"
-- If user says "use image X and create [hyper realistic] image showing Y", put "hyperrealistic Y" in additional_instructions AND set reference_image_path
-- If no text requested, use empty strings for brand_name, message, cta
-- WEATHER API: When user says "use weather API" or "apply weather conditions", set weather_location to a city name (default: "London")
+REQUIRED INFORMATION FOR BANNERS:
+1. Content type: Banner or Video?
+2. Brand name: What brand/company is this for?
+3. Banner type: What size/format? (social, leaderboard, square, digital_6_sheet, mpu, mobile banners, or Outernet screen types)
+4. Text inclusion: Should the banner include text or be visual-only?
+5. If text is included:
+   - Message: What's the main message?
+   - CTA: What's the call to action?
+6. Weather data: Should we include current weather information?
+7. Additional details: Any specific visual requirements, style, colors, etc.?
 
-CRITICAL RULES FOR VIDEOS:
-- If user says "use image X to create video", call generate_video with input_image_path
-- Extract the COMPLETE description after "where" or "showing" - include location, weather, action, everything
-- Map duration: 4 seconds = short, 6 seconds = standard, 8 seconds = extended
+REQUIRED INFORMATION FOR VIDEOS:
+1. Content type: Banner or Video?
+2. Brand name: What brand/company is this for?
+3. Video duration: Short (4s), standard (6s), or extended (8s)?
+4. Resolution: 720p or 1080p?
+5. Aspect ratio: 16:9, 9:16, or 1:1?
+6. Description: What should happen in the video?
+7. Image-to-video: Do they want to animate an existing image?
 
-NEVER ask for information if you can infer it. Just call the tool with your best interpretation."""
+CONVERSATION FLOW:
+1. When user makes a request, analyze what information is provided
+2. If critical information is missing, ask for it conversationally (one question at a time)
+3. Keep track of what you've learned in the conversation
+4. Only when you have all required information, call the appropriate tool
+5. If the user's request is vague (e.g., "make me a banner"), start by asking what brand/campaign it's for
+
+EXAMPLES OF GOOD QUESTIONS:
+- "What brand or company is this for?"
+- "Would you like a banner or a video?"
+- "What size banner do you need? (social media, billboard, leaderboard, etc.)"
+- "Should this banner include text, or would you prefer a visual-only design?"
+- "What message would you like to convey?"
+- "Would you like me to include current weather information in the design?"
+- "For the video, would you like it to be 4, 6, or 8 seconds long?"
+
+SPECIAL CASES:
+- If user says "use image X to create video", you still need to ask about brand, duration, resolution, aspect ratio, and description
+- If user attaches an image with their prompt, check if it's for reference (banner) or animation (video)
+- Default to 'social' banner type if user doesn't specify
+- Default to 'no weather' unless explicitly requested
+
+REMEMBER:
+- Be conversational and friendly
+- Ask ONE question at a time
+- Don't overwhelm the user with multiple questions
+- Use the conversation history to avoid asking for information already provided
+- Only call tools when you're confident you have all required information"""
 
 class Agent:
     def __init__(self):
@@ -145,9 +187,9 @@ class Agent:
         if sid not in self.state:
             self.state[sid] = []
         
-        # Extract attached image
-        img = re.search(r'\[ATTACHED_IMAGE:\s*(.+?)\]', text)
-        img_path = img.group(1) if img else None
+        # Extract attached images (support up to 5)
+        img_matches = re.findall(r'\[ATTACHED_IMAGE:\s*(.+?)\]', text)
+        img_paths = img_matches[:5] if img_matches else []  # Limit to 5 images
         
         # Build messages
         msgs = self.state[sid] + [{"role": "user", "content": text}]
@@ -178,16 +220,20 @@ class Agent:
                                 weather_location = tool_input.get('weather_location', 'London')
                                 weather_data = self._fetch_weather(weather_location)
                                 if weather_data:
-                                    print(f"🌤️  Weather: {weather_data['condition']}, {weather_data['temperature']}°C in {weather_location}")
+                                    print(f"🌤️ Weather: {weather_data['condition']}, {weather_data['temperature']}°C in {weather_location}")
                             
                             result = await generate_banner(
                                 campaign_name=tool_input.get('campaign_name', 'Campaign'),
                                 brand_name=tool_input.get('brand_name', ''),
-                                banner_type=tool_input.get('banner_type', 'social'),
+                                banner_type=tool_input.get('banner_type', 'landing_now'),
                                 message=tool_input.get('message', ''),
                                 cta=tool_input.get('cta', ''),
                                 additional_instructions=tool_input.get('additional_instructions', ''),
-                                reference_image_path=tool_input.get('reference_image_path', img_path or ''),
+                                reference_image_path=tool_input.get('reference_image_path', img_paths[0] if len(img_paths) > 0 else ''),
+                                reference_image_path_2=tool_input.get('reference_image_path_2', img_paths[1] if len(img_paths) > 1 else ''),
+                                reference_image_path_3=tool_input.get('reference_image_path_3', img_paths[2] if len(img_paths) > 2 else ''),
+                                reference_image_path_4=tool_input.get('reference_image_path_4', img_paths[3] if len(img_paths) > 3 else ''),
+                                reference_image_path_5=tool_input.get('reference_image_path_5', img_paths[4] if len(img_paths) > 4 else ''),
                                 weather_data=weather_data,
                                 model=tool_input.get('model', 'imagen4')
                             )
@@ -222,10 +268,10 @@ class Agent:
                                         for issue in val_data.get('issues', []):
                                             response_text += f"• {issue}\n"
                                     
-                                    response_text += f"\n📥 /files/{res['filename']}"
+                                    response_text += f"\n🔥 /files/{res['filename']}"
                                     return response_text
                             
-                            return result if "error" in res else f"✅ Banner created!\n\n📁 {res['filename']}\n📥 /files/{res['filename']}"
+                            return result if "error" in res else f"✅ Banner created!\n\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
                         elif tool_name == "generate_video":
                             result = await generate_video(
                                 campaign_name=tool_input.get('campaign_name', 'Campaign'),
@@ -234,7 +280,8 @@ class Agent:
                                 description=tool_input.get('description', 'Cinematic movement'),
                                 resolution=tool_input.get('resolution', '720p'),
                                 aspect_ratio=tool_input.get('aspect_ratio', '16:9'),
-                                input_image_path=tool_input.get('input_image_path', img_path or ''),
+                                screen_format=tool_input.get('screen_format', ''),
+                                input_image_path=tool_input.get('input_image_path', img_paths[0] if img_paths else ''),
                                 model=tool_input.get('model', 'veo')
                             )
                         
@@ -246,15 +293,18 @@ class Agent:
                         
                         # Format success message
                         if tool_name == "generate_banner":
-                            return f"✅ Banner created!\n\n📁 {res['filename']}\n📥 /files/{res['filename']}"
+                            return f"✅ Banner created!\n\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
                         else:
-                            return f"✅ Video created!\n\n🎬 {tool_input.get('description', '')}\n📁 {res['filename']}\n📥 /files/{res['filename']}"
+                            return f"✅ Video created!\n\n🎬 {tool_input.get('description', '')}\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
             
-            # If no tool call, return text response
+            # If no tool call, return text response (this is where the agent asks questions)
             text_response = ""
             for block in response.content:
                 if hasattr(block, 'text'):
                     text_response += block.text
+            
+            # Update conversation history
+            self.state[sid] = msgs + [{"role": "assistant", "content": response.content}]
             
             return text_response or "What would you like to create?"
             

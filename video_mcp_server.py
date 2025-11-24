@@ -137,7 +137,12 @@ async def generate_video(
     description: str,
     resolution: str = "720p",
     aspect_ratio: str = "16:9",
+    screen_format: str = "",
     input_image_path: str = "",
+    input_image_path_2: str = "",
+    input_image_path_3: str = "",
+    input_image_path_4: str = "",
+    input_image_path_5: str = "",
     model: str = "veo",
     additional_instructions: str = ""
 ) -> str:
@@ -153,12 +158,12 @@ async def generate_video(
     if model == "veo":
         return await generate_video_veo(
             campaign_name, brand_name, video_type, description,
-            resolution, aspect_ratio, input_image_path, additional_instructions
+            resolution, aspect_ratio, screen_format, input_image_path, additional_instructions
         )
     elif model == "runway":
         return await generate_video_runway(
             campaign_name, brand_name, video_type, description,
-            resolution, aspect_ratio, input_image_path, additional_instructions
+            resolution, aspect_ratio, screen_format, input_image_path, additional_instructions
         )
     else:
         return json.dumps({
@@ -173,6 +178,7 @@ async def generate_video_veo(
     description: str,
     resolution: str = "720p",
     aspect_ratio: str = "16:9",
+    screen_format: str = "",
     input_image_path: str = "",
     additional_instructions: str = ""
 ) -> str:
@@ -309,7 +315,12 @@ TECHNICAL:
         # Download video
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         source_type = "image" if input_image else "text"
-        filename = f"video_{video_type}_{actual_duration}s_{source_type}_{timestamp}.mp4"
+        
+        # Include screen_format in filename if provided
+        if screen_format:
+            filename = f"video_{screen_format}_{video_type}_{actual_duration}s_{source_type}_{timestamp}.mp4"
+        else:
+            filename = f"video_{video_type}_{actual_duration}s_{source_type}_{timestamp}.mp4"
         
         # Save to local outputs directory
         output_dir = os.path.join(os.path.dirname(__file__), "outputs")
@@ -376,6 +387,7 @@ async def generate_video_runway(
     description: str,
     resolution: str = "720p",
     aspect_ratio: str = "16:9",
+    screen_format: str = "",
     input_image_path: str = "",
     additional_instructions: str = ""
 ) -> str:
@@ -532,7 +544,12 @@ VISUAL ELEMENTS:
                 if video_response.status_code == 200:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     source_type = "image" if has_input_image else "text"
-                    filename = f"video_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
+                    
+                    # Include screen_format in filename if provided
+                    if screen_format:
+                        filename = f"video_{screen_format}_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
+                    else:
+                        filename = f"video_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
                     
                     # Save to outputs directory
                     output_dir = os.path.join(os.path.dirname(__file__), "outputs")

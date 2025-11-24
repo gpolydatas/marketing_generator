@@ -110,6 +110,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# VIDEO FORMAT SPECIFICATIONS
+VIDEO_FORMATS = {
+    "instagram_story": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Instagram/Facebook Story (vertical)"},
+    "instagram_feed": {"aspect_ratio": "1:1", "resolution": "1080p", "width": 1080, "height": 1080, "description": "Instagram Feed Post (square)"},
+    "instagram_reels": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Instagram Reels (vertical)"},
+    "tiktok": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "TikTok Video (vertical)"},
+    "youtube_video": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "YouTube Video (horizontal)"},
+    "youtube_short": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "YouTube Shorts (vertical)"},
+    "twitter_post": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1280, "height": 720, "description": "Twitter/X Post"},
+    "linkedin_post": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1280, "height": 720, "description": "LinkedIn Post"},
+    "mobile_vertical": {"aspect_ratio": "9:16", "resolution": "720p", "width": 720, "height": 1280, "description": "Mobile phone (vertical)"},
+    "mobile_horizontal": {"aspect_ratio": "16:9", "resolution": "720p", "width": 1280, "height": 720, "description": "Mobile phone (horizontal)"},
+    "tablet": {"aspect_ratio": "4:3", "resolution": "1080p", "width": 1440, "height": 1080, "description": "Tablet (iPad-style)"},
+    "desktop": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Desktop/Laptop"},
+    "landing_now": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Outernet Landing Now - 1080x1920"},
+    "landing_trending": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Outernet Landing Trending - 1080x1920"},
+    "vista_north": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Outernet Vista North - 1920x1080"},
+    "vista_west1": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Outernet Vista West1 - 1080x1920"},
+    "vista_west2": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Outernet Vista West2 - 1080x1920"},
+    "now_north": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Outernet NOW North - 1920x1080"},
+    "outernet_now": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Outernet Now - 1920x1080"},
+    "standard_16_9": {"aspect_ratio": "16:9", "resolution": "1080p", "width": 1920, "height": 1080, "description": "Standard 16:9 landscape"},
+    "standard_9_16": {"aspect_ratio": "9:16", "resolution": "1080p", "width": 1080, "height": 1920, "description": "Standard 9:16 portrait"},
+    "square": {"aspect_ratio": "1:1", "resolution": "1080p", "width": 1080, "height": 1080, "description": "Square 1:1 format"}
+}
+
+VIDEO_FORMAT_CATEGORIES = {
+    "🎬 Social Media": ["instagram_story", "instagram_feed", "instagram_reels", "tiktok", "youtube_video", "youtube_short", "twitter_post", "linkedin_post"],
+    "📱 Device-Optimized": ["mobile_vertical", "mobile_horizontal", "tablet", "desktop"],
+    "🏢 Outernet Screens": ["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "now_north", "outernet_now"],
+    "📐 Standard Formats": ["standard_16_9", "standard_9_16", "square"]
+}
+
 # Initialize session state
 if 'generation_log' not in st.session_state:
     st.session_state.generation_log = []
@@ -630,39 +663,89 @@ def main():
                 help="The agent maintains conversation context - you can ask follow-up questions!"
             )
             
-            # IMAGE UPLOAD for AI agent
-            st.markdown("##### 📎 Optional: Attach Image")
-            agent_image = st.file_uploader(
-                "Upload an image with your prompt",
-                type=['png', 'jpg', 'jpeg'],
-                help="Upload an image for style reference (banner) or to animate (video)",
-                key="agent_upload_img"
-            )
+            # IMAGE UPLOAD for AI agent - UP TO 5 IMAGES
+            st.markdown("##### 📎 Optional: Attach Images (Up to 5)")
+            
+            col_a1, col_a2, col_a3 = st.columns(3)
+            with col_a1:
+                agent_image_1 = st.file_uploader(
+                    "📸 Image 1",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="First image",
+                    key="agent_upload_img_1"
+                )
+            with col_a2:
+                agent_image_2 = st.file_uploader(
+                    "📸 Image 2",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Second image",
+                    key="agent_upload_img_2"
+                )
+            with col_a3:
+                agent_image_3 = st.file_uploader(
+                    "📸 Image 3",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Third image",
+                    key="agent_upload_img_3"
+                )
+            
+            col_a4, col_a5, col_a_spacer = st.columns(3)
+            with col_a4:
+                agent_image_4 = st.file_uploader(
+                    "📸 Image 4",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Fourth image",
+                    key="agent_upload_img_4"
+                )
+            with col_a5:
+                agent_image_5 = st.file_uploader(
+                    "📸 Image 5",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Fifth image",
+                    key="agent_upload_img_5"
+                )
+            
+            # Show count
+            agent_uploaded_count = sum([
+                1 if agent_image_1 else 0,
+                1 if agent_image_2 else 0,
+                1 if agent_image_3 else 0,
+                1 if agent_image_4 else 0,
+                1 if agent_image_5 else 0
+            ])
+            if agent_uploaded_count > 0:
+                st.info(f"✅ {agent_uploaded_count} image(s) will be attached to your message")
             
             prompt_submit = st.form_submit_button("💬 Send Message", type="primary", use_container_width=True)
         
         if prompt_submit and user_prompt:
             st.markdown("---")
             
-            # Save uploaded image if provided
-            agent_image_path = ""
-            if agent_image is not None:
-                outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-                if not os.path.exists(outputs_dir):
-                    os.makedirs(outputs_dir)
-                
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                agent_img_filename = f"agent_upload_{timestamp}_{agent_image.name}"
-                agent_image_path = os.path.join(outputs_dir, agent_img_filename)
-                
-                with open(agent_image_path, 'wb') as f:
-                    f.write(agent_image.getbuffer())
-                
-                st.info(f"📎 Image attached: {agent_img_filename}")
-                st.image(agent_image_path, caption="Attached image", width=300)
-                
-                # Add image path to prompt context
-                user_prompt += f"\n\n[ATTACHED_IMAGE: {agent_image_path}]"
+            # Save uploaded images if provided
+            agent_image_paths = []
+            agent_images = [agent_image_1, agent_image_2, agent_image_3, agent_image_4, agent_image_5]
+            
+            for idx, agent_img in enumerate(agent_images, 1):
+                if agent_img is not None:
+                    outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                    if not os.path.exists(outputs_dir):
+                        os.makedirs(outputs_dir)
+                    
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    agent_img_filename = f"agent_upload_{idx}_{timestamp}_{agent_img.name}"
+                    agent_img_path = os.path.join(outputs_dir, agent_img_filename)
+                    
+                    with open(agent_img_path, 'wb') as f:
+                        f.write(agent_img.getbuffer())
+                    
+                    agent_image_paths.append(agent_img_path)
+                    st.info(f"📎 Image {idx} attached: {agent_img_filename}")
+                    st.image(agent_img_path, caption=f"Image {idx}", width=200)
+            
+            # Add all image paths to prompt context
+            if agent_image_paths:
+                for img_path in agent_image_paths:
+                    user_prompt += f"\n[ATTACHED_IMAGE: {img_path}]"
             
             try:
                 from agent import run_single_prompt
@@ -725,9 +808,17 @@ def main():
                 message = st.text_input("Message*", "Up to 70% Off", help="Keep under 8 words")
                 cta = st.text_input("Call to Action*", "Shop Now", help="1-3 words like 'Shop Now'")
             
-            banner_type = st.selectbox("Banner Type*", ["social", "leaderboard", "square", "digital_6_sheet", "mpu", "mobile_banner_300x50", "mobile_banner_320x50"], 
-                                        help="social: 1200×628, leaderboard: 728×90, square: 1024×1024, digital_6_sheet: 1080×1920, mpu: 300×250, mobile_banner_300x50: 300×50, mobile_banner_320x50: 320×50"
-                                       )
+            banner_type = st.selectbox("Banner Type*", [
+                "social", "leaderboard", "square", "digital_6_sheet", "mpu", 
+                "mobile_banner_300x50", "mobile_banner_320x50",
+                "landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "outernet_now"
+            ], 
+                help="""
+                Standard: social (1200×628), leaderboard (728×90), square (1024×1024), digital_6_sheet (1080×1920), mpu (300×250), mobile banners (300×50, 320×50)
+                
+                Outernet Screens: landing_now (1080×1920), landing_trending (1080×1920), vista_north (1920×1080), vista_west1 (1080×1920), vista_west2 (1080×1920), outernet_now (1920x1080)
+                """
+            )
             # STYLE SETTINGS INSIDE FORM
             st.markdown("##### 🎨 Style Settings")
             col_style1, col_style2 = st.columns(2)
@@ -805,14 +896,58 @@ def main():
                     💡 **Tip:** Copy and paste these codes into the fields above!
                     """)
             
-            # IMAGE UPLOAD for style reference
-            st.markdown("##### 📎 Optional: Upload Reference Image")
-            reference_image = st.file_uploader(
-                "Upload an image for style inspiration (optional)",
-                type=['png', 'jpg', 'jpeg'],
-                help="Upload a reference image to guide the style, colors, and composition",
-                key="banner_ref_img"
-            )
+            # IMAGE UPLOAD for style reference - UP TO 5 IMAGES
+            st.markdown("##### 📎 Optional: Upload Reference Images (Up to 5)")
+            
+            col_img1, col_img2, col_img3 = st.columns(3)
+            with col_img1:
+                reference_image_1 = st.file_uploader(
+                    "📸 Image 1",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="First reference image",
+                    key="banner_ref_img_1"
+                )
+            with col_img2:
+                reference_image_2 = st.file_uploader(
+                    "📸 Image 2",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Second reference image",
+                    key="banner_ref_img_2"
+                )
+            with col_img3:
+                reference_image_3 = st.file_uploader(
+                    "📸 Image 3",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Third reference image",
+                    key="banner_ref_img_3"
+                )
+            
+            col_img4, col_img5, col_img_spacer = st.columns(3)
+            with col_img4:
+                reference_image_4 = st.file_uploader(
+                    "📸 Image 4",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Fourth reference image",
+                    key="banner_ref_img_4"
+                )
+            with col_img5:
+                reference_image_5 = st.file_uploader(
+                    "📸 Image 5",
+                    type=['png', 'jpg', 'jpeg'],
+                    help="Fifth reference image",
+                    key="banner_ref_img_5"
+                )
+            
+            # Show count of uploaded images
+            uploaded_count = sum([
+                1 if reference_image_1 else 0,
+                1 if reference_image_2 else 0,
+                1 if reference_image_3 else 0,
+                1 if reference_image_4 else 0,
+                1 if reference_image_5 else 0
+            ])
+            if uploaded_count > 0:
+                st.info(f"✅ {uploaded_count} image(s) uploaded - All will be combined into the banner")
             
             # WEATHER CONDITIONS SELECTION - NOW INSIDE FORM
             st.markdown("##### 🌤️ Weather Conditions (Optional)")
@@ -877,21 +1012,27 @@ def main():
                             st.warning(f"Weather API error: {weather_data['error']}. Generating banner without weather data.")
                             weather_data = None
                 
-                # Save reference image if uploaded
-                reference_image_path = ""
-                if reference_image is not None:
-                    outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-                    if not os.path.exists(outputs_dir):
-                        os.makedirs(outputs_dir)
-                    
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    ref_filename = f"reference_{timestamp}_{reference_image.name}"
-                    reference_image_path = os.path.join(outputs_dir, ref_filename)
-                    
-                    with open(reference_image_path, 'wb') as f:
-                        f.write(reference_image.getbuffer())
-                    
-                    st.info(f"📎 Reference image saved: {ref_filename}")
+                # Save reference images if uploaded
+                reference_image_paths = ["", "", "", "", ""]
+                reference_images = [reference_image_1, reference_image_2, reference_image_3, reference_image_4, reference_image_5]
+                
+                for idx, ref_img in enumerate(reference_images):
+                    if ref_img is not None:
+                        outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                        if not os.path.exists(outputs_dir):
+                            os.makedirs(outputs_dir)
+                        
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        ref_filename = f"reference_{idx+1}_{timestamp}_{ref_img.name}"
+                        ref_path = os.path.join(outputs_dir, ref_filename)
+                        
+                        with open(ref_path, 'wb') as f:
+                            f.write(ref_img.getbuffer())
+                        
+                        reference_image_paths[idx] = ref_path
+                        
+                        # FIXED: st.info now inside the if block
+                        st.info(f"📎 Reference image saved: {ref_filename}")
                 
                 # Use form's font and colors
                 font_to_use = global_font if global_font != 'Default' else 'Arial'
@@ -949,7 +1090,11 @@ def main():
                         message=final_message,
                         cta=final_cta,
                         additional_instructions=style_instructions,
-                        reference_image_path=reference_image_path,
+                        reference_image_path=reference_image_paths[0],
+                        reference_image_path_2=reference_image_paths[1],
+                        reference_image_path_3=reference_image_paths[2],
+                        reference_image_path_4=reference_image_paths[3],
+                        reference_image_path_5=reference_image_paths[4],
                         font_family=font_to_use,
                         primary_color=primary_to_use,
                         secondary_color=secondary_to_use,
@@ -1017,7 +1162,6 @@ def main():
                         
                         st.info("💡 Switch to Gallery tab to see all your content!")
         
-        
         # VIDEO CREATION
         with col_video:
             st.markdown("#### 🎬 Create Video")
@@ -1035,63 +1179,174 @@ def main():
                     help="Describe visuals, camera movements, and audio",
                     height=100)
                 
+                st.markdown("---")
+                st.markdown("##### 📺 Outernet Screen Selection")
+                st.caption("Choose which Outernet screen this video will be displayed on")
+                
+                # Direct screen format selection - NO CATEGORIES
+                screen_format = st.selectbox(
+                    "Outernet Screen*",
+                    options=["landing_now", "landing_trending", "vista_north", "vista_west1", "vista_west2", "now_north", "outernet_now"],
+                    format_func=lambda x: f"{x} - {VIDEO_FORMATS[x]['description']}",
+                    help="Select the specific Outernet screen"
+                )
+                
+                # Display format specifications
+                if screen_format:
+                    specs = VIDEO_FORMATS[screen_format]
+                    st.markdown(f"""
+                    <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea; margin: 10px 0;">
+                        <b>📐 Format Specifications:</b><br>
+                        • <b>Dimensions:</b> {specs['width']}x{specs['height']}px<br>
+                        • <b>Aspect Ratio:</b> {specs['aspect_ratio']}<br>
+                        • <b>Resolution:</b> {specs['resolution']}<br>
+                        • <b>Description:</b> {specs['description']}
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                st.markdown("##### ⚙️ Advanced Settings (Optional)")
+                
                 col1, col2 = st.columns(2)
                 with col1:
-                    v_resolution = st.selectbox("Resolution*", ["720p", "1080p"])
-                with col2:
-                    v_aspect = st.selectbox("Aspect Ratio*", ["16:9", "9:16"])
+                    # Resolution override (optional)
+                    override_resolution = st.checkbox("Override Resolution", value=False)
+                    if override_resolution:
+                        v_resolution = st.selectbox("Custom Resolution", ["720p", "1080p"], key="v_res_override")
+                    else:
+                        v_resolution = ""  # Use format default
                 
-                # IMAGE UPLOAD for image-to-video
-                st.markdown("##### 🎬 Optional: Upload Image to Animate")
-                v_input_image = st.file_uploader(
-                    "Upload an image to animate into video (optional)",
-                    type=['png', 'jpg', 'jpeg'],
-                    help="Upload an image that will be animated with the motion description above",
-                    key="video_input_img"
-                )
+                with col2:
+                    # Aspect ratio override (optional)
+                    override_aspect = st.checkbox("Override Aspect Ratio", value=False)
+                    if override_aspect:
+                        v_aspect = st.selectbox("Custom Aspect Ratio", ["16:9", "9:16", "1:1", "4:3"], key="v_asp_override")
+                    else:
+                        v_aspect = ""  # Use format default
+                
+                # IMAGE UPLOAD for image-to-video - UP TO 5 IMAGES
+                st.markdown("##### 🎬 Optional: Upload Images to Animate (Up to 5)")
+                
+                col_v1, col_v2, col_v3 = st.columns(3)
+                with col_v1:
+                    v_input_image_1 = st.file_uploader(
+                        "🖼️ Image 1",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="First image to animate",
+                        key="video_input_img_1"
+                    )
+                with col_v2:
+                    v_input_image_2 = st.file_uploader(
+                        "🖼️ Image 2",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="Second image",
+                        key="video_input_img_2"
+                    )
+                with col_v3:
+                    v_input_image_3 = st.file_uploader(
+                        "🖼️ Image 3",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="Third image",
+                        key="video_input_img_3"
+                    )
+                
+                col_v4, col_v5, col_v_spacer = st.columns(3)
+                with col_v4:
+                    v_input_image_4 = st.file_uploader(
+                        "🖼️ Image 4",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="Fourth image",
+                        key="video_input_img_4"
+                    )
+                with col_v5:
+                    v_input_image_5 = st.file_uploader(
+                        "🖼️ Image 5",
+                        type=['png', 'jpg', 'jpeg'],
+                        help="Fifth image",
+                        key="video_input_img_5"
+                    )
+                
+                # Show count
+                v_uploaded_count = sum([
+                    1 if v_input_image_1 else 0,
+                    1 if v_input_image_2 else 0,
+                    1 if v_input_image_3 else 0,
+                    1 if v_input_image_4 else 0,
+                    1 if v_input_image_5 else 0
+                ])
+                if v_uploaded_count > 0:
+                    st.info(f"✅ {v_uploaded_count} image(s) uploaded for animation")
                 
                 v_submitted = st.form_submit_button("🎬 Generate Video", type="primary", use_container_width=True)
             
             if v_submitted:
-                if not all([v_campaign, v_brand, v_description]):
+                if not all([v_campaign, v_brand, v_description, screen_format]):
                     st.error("Please fill in all required fields")
                 else:
-                    # Save input image if uploaded
-                    v_input_image_path = ""
-                    if v_input_image is not None:
-                        outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-                        if not os.path.exists(outputs_dir):
-                            os.makedirs(outputs_dir)
-                        
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        input_filename = f"video_input_{timestamp}_{v_input_image.name}"
-                        v_input_image_path = os.path.join(outputs_dir, input_filename)
-                        
-                        with open(v_input_image_path, 'wb') as f:
-                            f.write(v_input_image.getbuffer())
-                        
-                        st.info(f"📎 Input image saved: {input_filename}")
-                        st.image(v_input_image_path, caption="Image to animate", width=300)
+                    # Save input images if uploaded
+                    v_input_image_paths = ["", "", "", "", ""]
+                    v_input_images = [v_input_image_1, v_input_image_2, v_input_image_3, v_input_image_4, v_input_image_5]
+                    
+                    for idx, v_img in enumerate(v_input_images):
+                        if v_img is not None:
+                            outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+                            if not os.path.exists(outputs_dir):
+                                os.makedirs(outputs_dir)
+                            
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            input_filename = f"video_input_{idx+1}_{timestamp}_{v_img.name}"
+                            v_img_path = os.path.join(outputs_dir, input_filename)
+                            
+                            with open(v_img_path, 'wb') as f:
+                                f.write(v_img.getbuffer())
+                            
+                            v_input_image_paths[idx] = v_img_path
+                            st.info(f"📎 Image {idx+1} saved: {input_filename}")
+                    
+                    # Show first image if uploaded
+                    if v_input_image_paths[0]:
+                        st.image(v_input_image_paths[0], caption="Primary image to animate", width=300)
+                    
+                    # Get format specs
+                    format_specs = VIDEO_FORMATS[screen_format]
+                    final_resolution = v_resolution if v_resolution else format_specs["resolution"]
+                    final_aspect = v_aspect if v_aspect else format_specs["aspect_ratio"]
+                    
+                    st.info(f"🎯 Generating for: {format_specs['description']} ({format_specs['width']}x{format_specs['height']})")
                     
                     with st.spinner(f"🎬 Generating video with {st.session_state.selected_video_model.upper()}... This takes 1-3 minutes. Please wait..."):
-                        result = asyncio.run(generate_video_direct(
-                            v_campaign, v_brand, v_type, v_description, v_resolution, v_aspect, 
-                            input_image_path=v_input_image_path,
-                            model=st.session_state.selected_video_model
-                        ))
+                        try:
+                            from video_mcp_server import generate_video
+                            
+                            result_json = asyncio.run(generate_video(
+                                campaign_name=v_campaign,
+                                brand_name=v_brand,
+                                video_type=v_type,
+                                description=v_description,
+                                resolution=final_resolution,
+                                aspect_ratio=final_aspect,
+                                input_image_path=v_input_image_paths[0],
+                                model=st.session_state.selected_video_model
+                            ))
+                            
+                            result = json.loads(result_json)
+                            
+                            if "error" in result:
+                                st.error(f"❌ Error: {result['error']}")
+                            elif result.get("success"):
+                                st.success(f"✅ Video generated: {result['filename']}")
+                                st.info(f"📺 Format: {format_specs['description']}")
+                                st.info(f"📐 Resolution: {final_resolution} • Aspect Ratio: {final_aspect}")
+                                
+                                st.markdown("### 📦 Preview")
+                                filepath = result['filepath']
+                                metadata = load_metadata(filepath)
+                                display_video(filepath, metadata, key_suffix="create_preview")
+                                
+                                st.info("💡 Switch to Gallery tab to see all your content!")
                         
-                        if "error" in result:
-                            st.error(f"❌ Error: {result['error']}")
-                        elif result.get("success"):
-                            st.success(f"✅ Video generated: {result['filename']}")
-                            st.info("ℹ️ Please review the video manually")
-                            
-                            st.markdown("### 📦 Preview")
-                            filepath = result['filepath']
-                            metadata = load_metadata(filepath)
-                            display_video(filepath, metadata, key_suffix="create_preview")
-                            
-                            st.info("💡 Switch to Gallery tab to see all your content!")
+                        except Exception as e:
+                            st.error(f"❌ Error generating video: {str(e)}")
         
         st.markdown("---")
         
