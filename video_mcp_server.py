@@ -3,6 +3,8 @@
 VIDEO GENERATION MCP SERVER - WITH VALIDATION
 Supports both Google Veo 3.1 and RunwayML Gen-3 Alpha
 Includes comprehensive video validation using Claude Vision
+
+FIX: Added better error handling for operation.response.generated_videos
 """
 
 import os
@@ -228,7 +230,7 @@ async def validate_video(
 ) -> str:
     """Validate video using Claude Vision API"""
     
-    result = await validate_video_with_claude(
+    validation_result = await validate_video_with_claude(
         filepath=filepath,
         campaign_name=campaign_name,
         brand_name=brand_name,
@@ -238,7 +240,7 @@ async def validate_video(
         expected_aspect_ratio=expected_aspect_ratio
     )
     
-    return json.dumps(result, indent=2)
+    return json.dumps(validation_result, indent=2)
 
 
 async def generate_video_veo(
@@ -359,13 +361,36 @@ TECHNICAL:
             time.sleep(10)
             operation = client.operations.get(operation)
         
+        # ========================================
+        # FIX: Better error handling for response
+        # ========================================
         if not hasattr(operation, 'response') or not operation.response:
             return json.dumps({
                 "error": "Video generation failed - no response from API"
             })
         
+        # Check if generated_videos exists and is not empty
+        if not hasattr(operation.response, 'generated_videos') or operation.response.generated_videos is None:
+            return json.dumps({
+                "error": "Video generation failed - no generated_videos in response"
+            })
+        
+        if len(operation.response.generated_videos) == 0:
+            return json.dumps({
+                "error": "Video generation failed - generated_videos is empty"
+            })
+        
         # Get generated video
         generated_video = operation.response.generated_videos[0]
+        
+        # Check if video object is valid
+        if generated_video is None or not hasattr(generated_video, 'video') or generated_video.video is None:
+            return json.dumps({
+                "error": "Video generation failed - invalid video object in response"
+            })
+        # ========================================
+        # END FIX
+        # ========================================
         
         # Download video
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
