@@ -1326,7 +1326,8 @@ def main():
                                 resolution=final_resolution,
                                 aspect_ratio=final_aspect,
                                 input_image_path=v_input_image_paths[0],
-                                model=st.session_state.selected_video_model
+                                model=st.session_state.selected_video_model,
+                                auto_validate=True  # Enable auto-validation
                             ))
                             
                             result = json.loads(result_json)
@@ -1336,7 +1337,84 @@ def main():
                             elif result.get("success"):
                                 st.success(f"✅ Video generated: {result['filename']}")
                                 st.info(f"📺 Format: {format_specs['description']}")
-                                st.info(f"📐 Resolution: {final_resolution} • Aspect Ratio: {final_aspect}")
+                                st.info(f"📏 Resolution: {final_resolution} • Aspect Ratio: {final_aspect}")
+                                
+                                # Display validation results if available
+                                if "validation" in result and not result["validation"].get("error"):
+                                    validation = result["validation"]
+                                    
+                                    st.markdown("---")
+                                    st.markdown("### 🔍 Validation Results")
+                                    
+                                    if validation.get("passed"):
+                                        st.success("✅ Video PASSED validation!")
+                                    else:
+                                        st.warning("⚠️ Video validation found issues")
+                                    
+                                    # Display overall score
+                                    overall_score = validation.get("overall_score", 0)
+                                    st.metric("Overall Score", f"{overall_score:.1f}/10")
+                                    
+                                    # Display scores in columns
+                                    st.markdown("#### 📊 Detailed Scores")
+                                    col1, col2, col3 = st.columns(3)
+                                    
+                                    scores = validation.get("scores", {})
+                                    with col1:
+                                        st.metric("Visual Quality", f"{scores.get('visual_quality', 0)}/10")
+                                        st.metric("Brand Presence", f"{scores.get('brand_presence', 0)}/10")
+                                    with col2:
+                                        st.metric("Content Relevance", f"{scores.get('content_relevance', 0)}/10")
+                                        st.metric("Production Value", f"{scores.get('production_value', 0)}/10")
+                                    with col3:
+                                        st.metric("Technical Execution", f"{scores.get('technical_execution', 0)}/10")
+                                        st.metric("Marketing Effectiveness", f"{scores.get('marketing_effectiveness', 0)}/10")
+                                    
+                                    # Display issues if any
+                                    issues = validation.get("issues", [])
+                                    if issues:
+                                        st.markdown("#### ⚠️ Issues Found")
+                                        for issue in issues:
+                                            st.write(f"• {issue}")
+                                    
+                                    # Display strengths
+                                    strengths = validation.get("strengths", [])
+                                    if strengths:
+                                        st.markdown("#### ✨ Strengths")
+                                        for strength in strengths:
+                                            st.write(f"• {strength}")
+                                    
+                                    # Display recommendations
+                                    recommendations = validation.get("recommendations", [])
+                                    if recommendations:
+                                        st.markdown("#### 💡 Recommendations")
+                                        for rec in recommendations:
+                                            st.write(f"• {rec}")
+                                    
+                                    # Display summary
+                                    if validation.get("summary"):
+                                        st.markdown("#### 📝 Summary")
+                                        st.info(validation["summary"])
+                                    
+                                    # Display frame analysis in expander
+                                    frame_analysis = validation.get("frame_analysis", {})
+                                    if frame_analysis:
+                                        with st.expander("🎞️ Frame-by-Frame Analysis"):
+                                            if frame_analysis.get("opening"):
+                                                st.markdown("**Opening:**")
+                                                st.write(frame_analysis["opening"])
+                                            if frame_analysis.get("middle"):
+                                                st.markdown("**Middle:**")
+                                                st.write(frame_analysis["middle"])
+                                            if frame_analysis.get("closing"):
+                                                st.markdown("**Closing:**")
+                                                st.write(frame_analysis["closing"])
+                                    
+                                    # Technical metadata in expander
+                                    tech_metadata = validation.get("technical_metadata", {})
+                                    if tech_metadata:
+                                        with st.expander("🔧 Technical Details"):
+                                            st.json(tech_metadata)
                                 
                                 st.markdown("### 📦 Preview")
                                 filepath = result['filepath']
@@ -1347,7 +1425,6 @@ def main():
                         
                         except Exception as e:
                             st.error(f"❌ Error generating video: {str(e)}")
-        
         st.markdown("---")
         
         # IMAGE-TO-VIDEO SECTION

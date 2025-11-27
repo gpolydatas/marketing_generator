@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-VIDEO GENERATION MCP SERVER - DUAL MODEL SUPPORT
+VIDEO GENERATION MCP SERVER - WITH VALIDATION
 Supports both Google Veo 3.1 and RunwayML Gen-3 Alpha
+Includes comprehensive video validation using Claude Vision
 """
 
 import os
@@ -14,6 +15,9 @@ from google.genai import types
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 from mcp.server.stdio import stdio_server
+
+# Import validation module
+from video_validation import validate_video_with_claude
 
 # Video specifications
 VIDEO_SPECS = {
@@ -67,7 +71,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "input_image_path": {
                         "type": "string",
-                        "description": "OPTIONAL: Full filepath to an existing image to animate into video (Veo only)",
+                        "description": "OPTIONAL: Full filepath to an existing image to animate into video",
                         "default": ""
                     },
                     "model": {
@@ -76,10 +80,10 @@ async def list_tools() -> list[Tool]:
                         "description": "AI model to use: 'veo' for Google Veo 3.1, 'runway' for RunwayML Gen-3 Alpha",
                         "default": "veo"
                     },
-                    "additional_instructions": {
-                        "type": "string",
-                        "description": "Optional additional instructions for regeneration",
-                        "default": ""
+                    "auto_validate": {
+                        "type": "boolean",
+                        "description": "Automatically validate the generated video",
+                        "default": True
                     }
                 },
                 "required": ["campaign_name", "brand_name", "video_type", "description"]
@@ -87,7 +91,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="validate_video",
-            description="Validate a generated video against quality guidelines",
+            description="Validate a generated video using Claude Vision API - analyzes quality, brand presence, content relevance, and technical execution",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -97,7 +101,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "campaign_name": {
                         "type": "string",
-                        "description": "Name of campaign for context"
+                        "description": "Expected campaign name"
                     },
                     "brand_name": {
                         "type": "string",
@@ -105,7 +109,19 @@ async def list_tools() -> list[Tool]:
                     },
                     "description": {
                         "type": "string",
-                        "description": "Expected video description"
+                        "description": "Expected video content description"
+                    },
+                    "expected_duration": {
+                        "type": "integer",
+                        "description": "Expected duration in seconds"
+                    },
+                    "expected_resolution": {
+                        "type": "string",
+                        "description": "Expected resolution (e.g., '1080p', '720p')"
+                    },
+                    "expected_aspect_ratio": {
+                        "type": "string",
+                        "description": "Expected aspect ratio (e.g., '16:9', '9:16')"
                     }
                 },
                 "required": ["filepath", "campaign_name", "brand_name", "description"]
@@ -139,14 +155,10 @@ async def generate_video(
     aspect_ratio: str = "16:9",
     screen_format: str = "",
     input_image_path: str = "",
-    input_image_path_2: str = "",
-    input_image_path_3: str = "",
-    input_image_path_4: str = "",
-    input_image_path_5: str = "",
     model: str = "veo",
-    additional_instructions: str = ""
+    auto_validate: bool = True
 ) -> str:
-    """Generate video - routes to appropriate model"""
+    """Generate video and optionally validate it"""
     
     # Validate video type
     if video_type not in VIDEO_SPECS:
@@ -156,19 +168,77 @@ async def generate_video(
     
     # Route to appropriate model
     if model == "veo":
-        return await generate_video_veo(
+        result_json = await generate_video_veo(
             campaign_name, brand_name, video_type, description,
-            resolution, aspect_ratio, screen_format, input_image_path, additional_instructions
+            resolution, aspect_ratio, screen_format, input_image_path
         )
     elif model == "runway":
-        return await generate_video_runway(
+        result_json = await generate_video_runway(
             campaign_name, brand_name, video_type, description,
-            resolution, aspect_ratio, screen_format, input_image_path, additional_instructions
+            resolution, aspect_ratio, screen_format, input_image_path
         )
     else:
         return json.dumps({
             "error": f"Unknown model: {model}. Must be 'veo' or 'runway'"
         })
+    
+    result = json.loads(result_json)
+    
+    # If generation succeeded and auto_validate is True, validate the video
+    if result.get("success") and auto_validate:
+        print("\n" + "=" * 80)
+        print("🔍 AUTO-VALIDATING GENERATED VIDEO")
+        print("=" * 80)
+        
+        validation_result = await validate_video_with_claude(
+            filepath=result["filepath"],
+            campaign_name=campaign_name,
+            brand_name=brand_name,
+            description=description,
+            expected_duration=VIDEO_SPECS[video_type]["duration"],
+            expected_resolution=resolution,
+            expected_aspect_ratio=aspect_ratio
+        )
+        
+        # Add validation to result
+        result["validation"] = validation_result
+        
+        # Update metadata file with validation
+        metadata_file = result.get("metadata_file")
+        if metadata_file and os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+            metadata["validation"] = validation_result
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+        
+        return json.dumps(result, indent=2)
+    
+    return result_json
+
+
+async def validate_video(
+    filepath: str,
+    campaign_name: str,
+    brand_name: str,
+    description: str,
+    expected_duration: int = None,
+    expected_resolution: str = None,
+    expected_aspect_ratio: str = None
+) -> str:
+    """Validate video using Claude Vision API"""
+    
+    result = await validate_video_with_claude(
+        filepath=filepath,
+        campaign_name=campaign_name,
+        brand_name=brand_name,
+        description=description,
+        expected_duration=expected_duration,
+        expected_resolution=expected_resolution,
+        expected_aspect_ratio=expected_aspect_ratio
+    )
+    
+    return json.dumps(result, indent=2)
 
 
 async def generate_video_veo(
@@ -179,8 +249,7 @@ async def generate_video_veo(
     resolution: str = "720p",
     aspect_ratio: str = "16:9",
     screen_format: str = "",
-    input_image_path: str = "",
-    additional_instructions: str = ""
+    input_image_path: str = ""
 ) -> str:
     """Generate video using Google Veo 3.1 API - supports image-to-video"""
     
@@ -198,24 +267,17 @@ async def generate_video_veo(
             return json.dumps({
                 "error": f"Input image not found: {input_image_path}"
             })
-        print(f"🖼️  Input image will be uploaded: {input_image_path}")
+        print(f"🖼️ Input image will be uploaded: {input_image_path}")
     
     # Generate enhanced prompt
     specs = VIDEO_SPECS[video_type]
     actual_duration = specs['duration']
     
     # Veo API constraint: 1080p REQUIRES exactly 8 seconds duration
-    # If user requests 1080p with duration < 8s, we must either:
-    # 1. Change duration to 8s (breaks user expectation)
-    # 2. Change resolution to 720p (better option)
     original_resolution = resolution
     if resolution == "1080p" and actual_duration < 8:
         resolution = "720p"
-        print(f"⚠️  Veo API requires 8s for 1080p. Adjusted resolution to 720p for {actual_duration}s video")
-        print(f"    To use 1080p, please select 'extended' video type (8 seconds)")
-    
-    # Note: 720p works with all durations (4, 6, 8)
-    # Note: 1080p ONLY works with 8 seconds
+        print(f"⚠️ Veo API requires 8s for 1080p. Adjusted resolution to 720p for {actual_duration}s video")
     
     prompt = f"""Create a professional promotional video for {brand_name}'s {campaign_name}.
 
@@ -237,9 +299,6 @@ TECHNICAL:
 - Professional color grading
 - High production value"""
     
-    if additional_instructions:
-        prompt += f"\n\nADDITIONAL REQUIREMENTS:\n{additional_instructions}"
-    
     try:
         # Initialize Gemini client
         client = genai.Client(api_key=api_key)
@@ -251,16 +310,13 @@ TECHNICAL:
             try:
                 import mimetypes
                 
-                # Read the image file as raw bytes
                 with open(input_image_path, 'rb') as f:
                     image_bytes = f.read()
                 
-                # Get mime type
                 mime_type, _ = mimetypes.guess_type(input_image_path)
                 if not mime_type:
                     mime_type = 'image/png'
                 
-                # Create types.Image with raw bytes
                 input_image = types.Image(
                     image_bytes=image_bytes,
                     mime_type=mime_type
@@ -303,7 +359,6 @@ TECHNICAL:
             time.sleep(10)
             operation = client.operations.get(operation)
         
-        # Check if generation succeeded
         if not hasattr(operation, 'response') or not operation.response:
             return json.dumps({
                 "error": "Video generation failed - no response from API"
@@ -316,23 +371,19 @@ TECHNICAL:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         source_type = "image" if input_image else "text"
         
-        # Include screen_format in filename if provided
         if screen_format:
             filename = f"video_{screen_format}_{video_type}_{actual_duration}s_{source_type}_{timestamp}.mp4"
         else:
             filename = f"video_{video_type}_{actual_duration}s_{source_type}_{timestamp}.mp4"
         
-        # Save to local outputs directory
         output_dir = os.path.join(os.path.dirname(__file__), "outputs")
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         filepath = os.path.join(output_dir, filename)
         
-        # Download the file
         client.files.download(file=generated_video.video)
         generated_video.video.save(filepath)
         
-        # Get file size
         file_size = os.path.getsize(filepath) / 1024 / 1024
         
         # Save metadata
@@ -347,13 +398,11 @@ TECHNICAL:
             "aspect_ratio": aspect_ratio,
             "source_type": source_type,
             "input_image": input_image_path if input_image else None,
-            "additional_instructions": additional_instructions,
             "filename": filename,
             "filepath": filepath,
             "file_size_mb": round(file_size, 2),
             "model": "veo-3.1-generate-preview",
-            "timestamp": datetime.now().isoformat(),
-            "note": "Veo API requires 8s duration for 1080p resolution" if original_resolution != resolution else None
+            "timestamp": datetime.now().isoformat()
         }
         
         metadata_file = filepath.replace('.mp4', '.json')
@@ -372,8 +421,7 @@ TECHNICAL:
             "input_image": input_image_path if input_image else None,
             "file_size_mb": round(file_size, 2),
             "model": "veo-3.1-generate-preview",
-            "metadata_file": metadata_file,
-            "note": "Resolution adjusted to 720p (Veo requires 8s for 1080p)" if original_resolution != resolution else None
+            "metadata_file": metadata_file
         }, indent=2)
             
     except Exception as e:
@@ -388,8 +436,7 @@ async def generate_video_runway(
     resolution: str = "720p",
     aspect_ratio: str = "16:9",
     screen_format: str = "",
-    input_image_path: str = "",
-    additional_instructions: str = ""
+    input_image_path: str = ""
 ) -> str:
     """Generate video using RunwayML Gen-3 Alpha API - supports image-to-video"""
     
@@ -407,7 +454,7 @@ async def generate_video_runway(
             return json.dumps({
                 "error": f"Input image not found: {input_image_path}"
             })
-        print(f"🖼️  Input image for RunwayML: {input_image_path}")
+        print(f"🖼️ Input image for RunwayML: {input_image_path}")
     
     # Generate enhanced prompt
     specs = VIDEO_SPECS[video_type]
@@ -424,18 +471,7 @@ REQUIREMENTS:
 - Smooth camera movements
 - Professional lighting and composition
 - Engaging visual storytelling
-- Suitable for digital advertising
-
-VISUAL ELEMENTS:
-- Clear focus on the product/service
-- Dynamic but smooth transitions
-- Professional color grading
-- High production value
-- Attention-grabbing opening
-- Strong visual impact"""
-    
-    if additional_instructions:
-        prompt += f"\n\nADDITIONAL REQUIREMENTS:\n{additional_instructions}"
+- Suitable for digital advertising"""
     
     try:
         headers = {
@@ -444,16 +480,8 @@ VISUAL ELEMENTS:
             "X-Runway-Version": "2024-11-06"
         }
         
-        # Map aspect ratio to RunwayML format (using resolution format for 2024-11-06 version)
-        # For Gen-3 Alpha Turbo: use resolution format like "1280:768" or "768:1280"
         runway_ratio = "1280:768" if aspect_ratio == "16:9" else "768:1280"
-        
-        # RunwayML Gen-3 Alpha Turbo only supports 5 or 10 second durations
-        # Map our durations (4, 6, 8) to RunwayML's supported durations
-        if specs['duration'] <= 5:
-            runway_duration = 5
-        else:
-            runway_duration = 10
+        runway_duration = 5 if specs['duration'] <= 5 else 10
         
         payload = {
             "promptText": prompt,
@@ -462,30 +490,24 @@ VISUAL ELEMENTS:
             "ratio": runway_ratio
         }
         
-        # Add image if provided (IMAGE-TO-VIDEO)
+        # Add image if provided
         if has_input_image:
             print(f"⏳ Uploading image to RunwayML...")
-            
-            # First, upload the image to get a URL
-            # RunwayML requires the image to be base64 encoded or hosted
             import base64
+            import mimetypes
             
             with open(input_image_path, 'rb') as f:
                 image_data = base64.b64encode(f.read()).decode('utf-8')
             
-            # Determine image type
-            import mimetypes
             mime_type, _ = mimetypes.guess_type(input_image_path)
             if not mime_type:
                 mime_type = 'image/png'
             
-            # Add promptImage for image-to-video
             payload["promptImage"] = f"data:{mime_type};base64,{image_data}"
             print(f"✅ Image encoded and added to payload")
         
         print(f"⏳ Creating RunwayML generation task...")
         
-        # Create generation task - CORRECT ENDPOINT
         response = requests.post(
             "https://api.dev.runwayml.com/v1/image_to_video",
             headers=headers,
@@ -507,18 +529,13 @@ VISUAL ELEMENTS:
             })
         
         print(f"✅ Task created: {task_id}")
-        
-        if has_input_image:
-            print(f"⏳ Generating {runway_duration}s video from image (this takes 1-3 minutes)...")
-        else:
-            print(f"⏳ Generating {runway_duration}s video from text (this takes 1-3 minutes)...")
+        print(f"⏳ Generating video (this takes 1-3 minutes)...")
         
         # Poll for completion
-        max_attempts = 60  # 5 minutes max
+        max_attempts = 60
         for attempt in range(max_attempts):
-            time.sleep(5)  # Check every 5 seconds
+            time.sleep(5)
             
-            # CORRECT ENDPOINT - Use tasks endpoint to check status
             status_response = requests.get(
                 f"https://api.dev.runwayml.com/v1/tasks/{task_id}",
                 headers=headers,
@@ -538,20 +555,17 @@ VISUAL ELEMENTS:
                 
                 print(f"✅ Video generated! Downloading...")
                 
-                # Download video
                 video_response = requests.get(video_url, timeout=60)
                 
                 if video_response.status_code == 200:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     source_type = "image" if has_input_image else "text"
                     
-                    # Include screen_format in filename if provided
                     if screen_format:
                         filename = f"video_{screen_format}_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
                     else:
                         filename = f"video_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
                     
-                    # Save to outputs directory
                     output_dir = os.path.join(os.path.dirname(__file__), "outputs")
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
@@ -573,7 +587,6 @@ VISUAL ELEMENTS:
                         "aspect_ratio": aspect_ratio,
                         "source_type": source_type,
                         "input_image": input_image_path if has_input_image else None,
-                        "additional_instructions": additional_instructions,
                         "filename": filename,
                         "filepath": filepath,
                         "url": video_url,
@@ -607,54 +620,13 @@ VISUAL ELEMENTS:
                 error_msg = status_data.get("error", "Unknown error")
                 return json.dumps({"error": f"Video generation failed: {error_msg}"})
             
-            # Still processing, continue polling
-            if attempt % 6 == 0:  # Print progress every 30 seconds
+            if attempt % 6 == 0:
                 print(f"   Still processing... ({attempt * 5}s elapsed)")
         
         return json.dumps({"error": "Video generation timed out after 5 minutes"})
             
     except Exception as e:
         return json.dumps({"error": f"RunwayML API error: {str(e)}"})
-
-async def validate_video(
-    filepath: str,
-    campaign_name: str,
-    brand_name: str,
-    description: str
-) -> str:
-    """Validate video - simplified validation"""
-    
-    # Check if file exists
-    if not os.path.exists(filepath):
-        return json.dumps({
-            "error": f"File not found: {filepath}"
-        })
-    
-    try:
-        # Get file info
-        file_size = os.path.getsize(filepath) / 1024 / 1024
-        
-        # Simplified validation (video analysis is complex)
-        validation_result = {
-            "passed": True,
-            "scores": {
-                "visual_quality": 8,
-                "brand_presence": 7,
-                "content_relevance": 8,
-                "production_value": 8,
-                "overall_quality": 8
-            },
-            "issues": [],
-            "recommendations": [],
-            "feedback": f"Video generated successfully. File size: {file_size:.2f}MB. Basic validation passed. Review the video manually for final approval."
-        }
-        
-        return json.dumps(validation_result, indent=2)
-            
-    except Exception as e:
-        return json.dumps({
-            "error": f"Validation error: {str(e)}"
-        })
 
 
 async def main():
