@@ -127,7 +127,7 @@ def get_video_metadata(video_path: str) -> dict:
 
 
 async def validate_video_with_claude(
-    video_path: str,
+    filepath: str,
     campaign_name: str,
     brand_name: str,
     description: str,
@@ -139,7 +139,7 @@ async def validate_video_with_claude(
     Validate video using Claude Vision API
     
     Args:
-        video_path: Path to video file
+        filepath: Path to video file
         campaign_name: Expected campaign name
         brand_name: Expected brand name
         description: Expected video description/requirements
@@ -152,8 +152,8 @@ async def validate_video_with_claude(
     """
     
     # Check if video exists
-    if not os.path.exists(video_path):
-        return {"error": f"Video file not found: {video_path}"}
+    if not os.path.exists(filepath):
+        return {"error": f"Video file not found: {filepath}"}
     
     # Load API key
     api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -163,14 +163,14 @@ async def validate_video_with_claude(
     print("=" * 80)
     print("🎬 VIDEO VALIDATION")
     print("=" * 80)
-    print(f"📁 Video: {os.path.basename(video_path)}")
+    print(f"📁 Video: {os.path.basename(filepath)}")
     print(f"🎯 Campaign: {campaign_name}")
     print(f"🏢 Brand: {brand_name}")
     print("=" * 80)
     
     # Extract video metadata
     print("📊 Extracting video metadata...")
-    video_metadata = get_video_metadata(video_path)
+    video_metadata = get_video_metadata(filepath)
     
     if video_metadata:
         print(f"   Resolution: {video_metadata.get('width')}x{video_metadata.get('height')}")
@@ -180,7 +180,7 @@ async def validate_video_with_claude(
     
     # Extract frames from video
     print(f"\n🎞️ Extracting frames for analysis...")
-    frame_paths = extract_video_frames(video_path, num_frames=6)
+    frame_paths = extract_video_frames(filepath, num_frames=6)
     
     if not frame_paths:
         return {
