@@ -36,7 +36,7 @@ def check_ffmpeg_installed() -> bool:
 def install_ffmpeg_instructions():
     """Return installation instructions for ffmpeg on Ubuntu"""
     return """
-âŒ ffmpeg is not installed. Video validation requires ffmpeg.
+❌ ffmpeg is not installed. Video validation requires ffmpeg.
 
 To install on Ubuntu 24:
     sudo apt-get update
@@ -51,11 +51,17 @@ To verify installation:
 @contextmanager
 def temp_directory():
     """Context manager for safe temporary directory handling"""
-    temp_dir = None
     temp_dir = tempfile.mkdtemp(prefix='video_validation_')
-    # Ensure directory has proper permissions
     os.chmod(temp_dir, 0o755)
-    yield temp_dir
+    try:
+        yield temp_dir
+    finally:
+        try:
+            shutil.rmtree(temp_dir)
+        except:
+            pass
+
+
 def run_ffmpeg_command(cmd: list, timeout: int = 30) -> tuple[bool, str, str]:
     """
     Run ffmpeg/ffprobe command with proper error handling
@@ -69,7 +75,7 @@ def run_ffmpeg_command(cmd: list, timeout: int = 30) -> tuple[bool, str, str]:
             capture_output=True,
             text=True,
             timeout=timeout,
-            check=False  # Don't raise on non-zero exit
+            check=False
         )
         return (result.returncode == 0, result.stdout, result.stderr)
     except subprocess.TimeoutExpired:
@@ -94,7 +100,7 @@ def get_video_duration(video_path: str) -> float:
         try:
             return float(stdout.strip())
         except ValueError:
-            
+            pass
     
     # Fallback: try to get from stream instead
     cmd_alt = [
@@ -114,7 +120,6 @@ def get_video_duration(video_path: str) -> float:
         except ValueError:
             pass
     
-    
     return 6.0
 
 
@@ -129,50 +134,41 @@ def extract_video_frames(video_path: str, num_frames: int = 6) -> list[str]:
     Returns:
         List of temporary frame file paths
     """
-    # Check ffmpeg first
     if not check_ffmpeg_installed():
-        
+        print("❌ ffmpeg not installed")
         return []
     
-    # Verify video file exists
     if not os.path.exists(video_path):
-        
+        print(f"❌ Video not found: {video_path}")
         return []
     
-    # Check file is readable
     if not os.access(video_path, os.R_OK):
-        
+        print(f"❌ Video not readable: {video_path}")
         return []
     
     with temp_directory() as temp_dir:
         frame_paths = []
         
-        # Get video duration
         duration = get_video_duration(video_path)
+        print(f"📊 Video duration: {duration:.2f}s")
         
-        # Calculate frame intervals (avoid first and last 0.5s)
         start_offset = 0.5
         end_offset = 0.5
         usable_duration = max(duration - start_offset - end_offset, 1.0)
         interval = usable_duration / (num_frames + 1)
         
-        # Extract frames at calculated intervals
         extracted_count = 0
         for i in range(1, num_frames + 1):
             timestamp = start_offset + (interval * i)
             
-            # Don't exceed video duration
             if timestamp >= duration - 0.1:
-                
                 continue
             
-            frame_path = os.path.join(temp_dir, 'frame_{:02d}.jpg'.format(i))
+            frame_path = os.path.join(temp_dir, f'frame_{i:02d}.jpg')
             
-            # Extract frame with ffmpeg
-            timestamp_str = str(timestamp)
             cmd = [
                 'ffmpeg',
-                '-ss', timestamp_str,
+                '-ss', str(timestamp),
                 '-i', video_path,
                 '-vframes', '1',
                 '-q:v', '2',
@@ -183,21 +179,20 @@ def extract_video_frames(video_path: str, num_frames: int = 6) -> list[str]:
             success, stdout, stderr = run_ffmpeg_command(cmd, timeout=30)
             
             if success and os.path.exists(frame_path) and os.path.getsize(frame_path) > 0:
-                # Copy to persistent location before temp_dir cleanup
                 persistent_dir = tempfile.gettempdir()
-                persistent_path = os.path.join(persistent_dir, 'video_frame_{}_{:02d}.jpg'.format(os.getpid(), i))
+                persistent_path = os.path.join(persistent_dir, f'video_frame_{os.getpid()}_{i:02d}.jpg')
                 shutil.copy2(frame_path, persistent_path)
                 frame_paths.append(persistent_path)
                 extracted_count += 1
-                
+                print(f"  ✅ Frame {i} extracted at {timestamp:.2f}s")
             else:
-                
-                if stderr:
-                    
+                print(f"  ⚠️ Frame {i} failed")
         
         if extracted_count == 0:
+            print("❌ No frames extracted")
             return []
         
+        print(f"✅ Extracted {extracted_count} frames")
         return frame_paths
 
 
@@ -224,7 +219,6 @@ def get_video_metadata(video_path: str) -> dict:
             stream = data.get('streams', [{}])[0]
             format_info = data.get('format', {})
             
-            # Parse frame rate
             frame_rate_str = stream.get('r_frame_rate', '0/1')
             try:
                 num, den = map(int, frame_rate_str.split('/'))
@@ -232,7 +226,6 @@ def get_video_metadata(video_path: str) -> dict:
             except:
                 frame_rate = 0
             
-            # Get duration (try format first, then stream)
             duration = format_info.get('duration')
             if duration is None:
                 duration = stream.get('duration')
@@ -249,9 +242,8 @@ def get_video_metadata(video_path: str) -> dict:
                 'frame_rate': f'{frame_rate:.2f} fps' if frame_rate else 'unknown',
                 'file_size_mb': int(format_info.get('size', 0)) / 1024 / 1024
             }
-        except json.JSONDecodeError as e:
-        except Exception as e:
-    else:
+        except:
+            pass
     
     return {}
 
@@ -263,57 +255,48 @@ def encode_image_file(image_path: str, max_size_mb: int = 5) -> tuple[str, str]:
     Returns:
         (base64_data, mime_type)
     """
-    try:
-        # Check file size
-        file_size_mb = os.path.getsize(image_path) / 1024 / 1024
-        
-        if file_size_mb > max_size_mb:
-            # Compress using PIL if available
-            try:
-                from PIL import Image
-                import io
-                
-                img = Image.open(image_path)
-                
-                # Convert RGBA to RGB if needed
-                if img.mode == 'RGBA':
-                    img = img.convert('RGB')
-                
-                # Compress to target size
-                buffer = io.BytesIO()
-                quality = 85
-                
-                while quality > 20:
-                    buffer.seek(0)
-                    buffer.truncate()
-                    img.save(buffer, format='JPEG', quality=quality, optimize=True)
-                    compressed_size = buffer.tell() / 1024 / 1024
-                    
-                    if compressed_size < max_size_mb:
-                        break
-                    
-                    quality -= 10
-                
+    file_size_mb = os.path.getsize(image_path) / 1024 / 1024
+    
+    if file_size_mb > max_size_mb:
+        try:
+            from PIL import Image
+            import io
+            
+            img = Image.open(image_path)
+            
+            if img.mode == 'RGBA':
+                img = img.convert('RGB')
+            
+            buffer = io.BytesIO()
+            quality = 85
+            
+            while quality > 20:
                 buffer.seek(0)
-                image_data = base64.standard_b64encode(buffer.read()).decode('utf-8')
+                buffer.truncate()
+                img.save(buffer, format='JPEG', quality=quality, optimize=True)
+                compressed_size = buffer.tell() / 1024 / 1024
                 
-                return (image_data, 'image/jpeg')
+                if compressed_size < max_size_mb:
+                    break
                 
-            except ImportError:
-        
-        # Read and encode normally
-        with open(image_path, 'rb') as f:
-            image_data = base64.standard_b64encode(f.read()).decode('utf-8')
-        
-        # Determine MIME type
-        mime_type = 'image/jpeg'
-        if image_path.lower().endswith('.png'):
-            mime_type = 'image/png'
-        
-        return (image_data, mime_type)
-        
-    except Exception as e:
-        raise
+                quality -= 10
+            
+            buffer.seek(0)
+            image_data = base64.standard_b64encode(buffer.read()).decode('utf-8')
+            
+            return (image_data, 'image/jpeg')
+            
+        except ImportError:
+            pass
+    
+    with open(image_path, 'rb') as f:
+        image_data = base64.standard_b64encode(f.read()).decode('utf-8')
+    
+    mime_type = 'image/jpeg'
+    if image_path.lower().endswith('.png'):
+        mime_type = 'image/png'
+    
+    return (image_data, mime_type)
 
 
 async def validate_video_with_claude(
@@ -327,76 +310,74 @@ async def validate_video_with_claude(
 ) -> dict:
     """
     Validate video using Claude Vision API
-    
-    Args:
-        filepath: Path to video file
-        campaign_name: Expected campaign name
-        brand_name: Expected brand name
-        description: Expected video description/requirements
-        expected_duration: Expected duration in seconds
-        expected_resolution: Expected resolution (e.g., "1080p", "720p")
-        expected_aspect_ratio: Expected aspect ratio (e.g., "16:9", "9:16")
-    
-    Returns:
-        Validation result dictionary
     """
     
-    # Check if video exists
-    if not os.path.exists(filepath):
-        return {"error": f"Video file not found: {filepath}"}
-    
-    # Check if readable
-    if not os.access(filepath, os.R_OK):
-        return {"error": f"Video file is not readable: {filepath}"}
-    
-    # Load API key
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        return {"error": "ANTHROPIC_API_KEY environment variable not set"}
-    
-    # Check ffmpeg
-    if not check_ffmpeg_installed():
-        return {
-            "error": "ffmpeg is not installed",
-            "install_instructions": install_ffmpeg_instructions()
-        }
-    
-    
-    
-    
-    
-    # Extract video metadata
-    video_metadata = get_video_metadata(filepath)
-    
-    if video_metadata:
-        
-        
-        
-        
-        
-    else:
-    
-    # Extract frames from video
-    frame_paths = extract_video_frames(filepath, num_frames=6)
-    
-    if not frame_paths:
-        return {
-            "error": "Failed to extract video frames. Please ensure ffmpeg is installed and the video is valid.",
-            "technical_metadata": video_metadata,
-            "install_instructions": install_ffmpeg_instructions()
-        }
-    
-    
     try:
-        # Encode frames as base64
+        print("=" * 80)
+        print("🎬 VIDEO VALIDATION START")
+        print(f"📁 File: {filepath}")
+        print(f"📂 Exists: {os.path.exists(filepath)}")
+        if os.path.exists(filepath):
+            print(f"📊 Size: {os.path.getsize(filepath) / 1024 / 1024:.2f} MB")
+        print("=" * 80)
+        
+        if not os.path.exists(filepath):
+            return {"error": f"Video file not found: {filepath}"}
+        
+        if not os.access(filepath, os.R_OK):
+            return {"error": f"Video file is not readable: {filepath}"}
+        
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            return {"error": "ANTHROPIC_API_KEY environment variable not set"}
+        
+        print("🔍 Checking ffmpeg installation...")
+        if not check_ffmpeg_installed():
+            return {
+                "error": "ffmpeg is not installed",
+                "install_instructions": install_ffmpeg_instructions()
+            }
+        print("✅ ffmpeg found")
+        
+        print("📊 Extracting metadata...")
+        try:
+            video_metadata = get_video_metadata(filepath)
+            if video_metadata:
+                print(f"✅ Metadata: {video_metadata}")
+            else:
+                print("⚠️ No metadata extracted")
+                video_metadata = {}
+        except Exception as e:
+            print(f"⚠️ Metadata error: {e}")
+            video_metadata = {}
+        
+        print("🎞️ Extracting frames...")
+        try:
+            frame_paths = extract_video_frames(filepath, num_frames=6)
+        except Exception as e:
+            print(f"❌ Frame extraction error: {e}")
+            return {
+                "error": f"Failed to extract frames: {str(e)}",
+                "technical_metadata": video_metadata
+            }
+        
+        if not frame_paths:
+            return {
+                "error": "Failed to extract video frames",
+                "technical_metadata": video_metadata,
+                "install_instructions": install_ffmpeg_instructions()
+            }
+        
+        print("🖼️ Encoding frames...")
         encoded_frames = []
         
         for idx, frame_path in enumerate(frame_paths, 1):
             try:
-                
                 frame_data, mime_type = encode_image_file(frame_path)
                 encoded_frames.append((frame_data, mime_type))
+                print(f"  ✅ Frame {idx} encoded")
             except Exception as e:
+                print(f"  ⚠️ Frame {idx} encoding error: {e}")
                 continue
         
         if not encoded_frames:
@@ -405,8 +386,8 @@ async def validate_video_with_claude(
                 "technical_metadata": video_metadata
             }
         
+        print(f"✅ {len(encoded_frames)} frames ready for analysis")
         
-        # Build validation prompt
         prompt = f"""Analyze this promotional video by examining the provided frames.
 
 **Campaign Requirements:**
@@ -424,51 +405,22 @@ async def validate_video_with_claude(
 
 **Validation Criteria (Score 0-10 for each):**
 
-1. **Visual Quality (0-10)**: 
-   - Image clarity and sharpness
-   - Professional color grading
-   - Proper lighting and exposure
-   - No artifacts or glitches
+1. **Visual Quality (0-10)**: Image clarity, color grading, lighting, no artifacts
+2. **Brand Presence (0-10)**: Is "{brand_name}" clearly visible and prominent?
+3. **Content Relevance (0-10)**: Does it match "{description}"?
+4. **Production Value (0-10)**: Professional cinematography, smooth movements
+5. **Technical Execution (0-10)**: Smooth transitions, consistent quality
+6. **Marketing Effectiveness (0-10)**: Attention-grabbing, clear messaging
 
-2. **Brand Presence (0-10)**:
-   - Is "{brand_name}" clearly visible and prominent?
-   - Is branding consistent throughout?
-   - Does it match brand identity?
-
-3. **Content Relevance (0-10)**:
-   - Does the video match the description: "{description}"?
-   - Are all expected visual elements present?
-   - Is the storytelling coherent?
-
-4. **Production Value (0-10)**:
-   - Professional cinematography
-   - Smooth camera movements
-   - Engaging composition
-   - Attention to detail
-
-5. **Technical Execution (0-10)**:
-   - Smooth transitions between frames
-   - Consistent quality throughout
-   - No technical issues visible
-   - Professional post-production
-
-6. **Marketing Effectiveness (0-10)**:
-   - Attention-grabbing opening
-   - Clear messaging
-   - Compelling visuals
-   - Suitable for target audience
-
-**Identify Specific Issues:**
-- Missing or incorrect brand elements
-- Quality problems (blur, artifacts, poor lighting)
-- Content mismatches with requirements
+**Identify Issues:**
+- Missing/incorrect brand elements
+- Quality problems
+- Content mismatches
 - Technical issues
-- Areas for improvement
 
 **Overall Assessment:**
-- Does the video PASS validation? (true/false)
-  - PASS if all scores >= 6 and no critical issues
-  - FAIL if any score < 6 or critical issues found
+- PASS if all scores >= 6 and no critical issues
+- FAIL if any score < 6 or critical issues found
 
 Respond in JSON format:
 {{
@@ -490,10 +442,7 @@ Respond in JSON format:
     }}
 }}"""
 
-        # Call Claude Vision API
-        client = Anthropic(api_key=api_key)
-        
-        # Build content array with all frames
+        print("🤖 Calling Claude Vision API...")
         content = []
         for idx, (frame_data, mime_type) in enumerate(encoded_frames, 1):
             content.append({
@@ -504,20 +453,19 @@ Respond in JSON format:
                     "data": frame_data,
                 },
             })
-            # Add caption for each frame
             timestamp = (video_metadata.get('duration', 6) / (len(encoded_frames) + 1)) * idx
             content.append({
                 "type": "text",
                 "text": f"Frame {idx} (at {timestamp:.1f}s):"
             })
         
-        # Add main prompt at the end
         content.append({
             "type": "text",
             "text": prompt
         })
         
-        
+        print("⏳ Waiting for Claude response...")
+        client = Anthropic(api_key=api_key)
         
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -528,26 +476,18 @@ Respond in JSON format:
                     "content": content,
                 }
             ],
+            timeout=120.0
         )
         
-        # Parse response
+        print("✅ Claude response received")
+        
         response_text = response.content[0].text
         
-        
-        
-        
-        
-        
-        
-        # Extract JSON from response (handle markdown code blocks)
         import re
-        
-        # Try to find JSON in code block first
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
         if json_match:
             json_str = json_match.group(1)
         else:
-            # Try to find JSON without code block
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
                 json_str = json_match.group(0)
@@ -558,20 +498,11 @@ Respond in JSON format:
                     "technical_metadata": video_metadata
                 }
         
-        try:
-            validation_result = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            return {
-                "error": f"Failed to parse validation JSON: {str(e)}",
-                "raw_response": response_text[:1000],
-                "technical_metadata": video_metadata
-            }
+        validation_result = json.loads(json_str)
         
-        # Add metadata
         validation_result["technical_metadata"] = video_metadata
         validation_result["frames_analyzed"] = len(encoded_frames)
         
-        # Calculate overall score
         scores = [
             validation_result.get("visual_quality", 0),
             validation_result.get("brand_presence", 0),
@@ -582,7 +513,6 @@ Respond in JSON format:
         ]
         validation_result["overall_score"] = sum(scores) / len(scores) if scores else 0
         
-        # Create scores dict for compatibility
         validation_result["scores"] = {
             "visual_quality": validation_result.get("visual_quality", 0),
             "brand_presence": validation_result.get("brand_presence", 0),
@@ -593,29 +523,34 @@ Respond in JSON format:
             "overall": validation_result["overall_score"]
         }
         
-        
-        
+        print("✅ Validation complete")
+        print("=" * 80)
         
         return validation_result
         
     except Exception as e:
         import traceback
-        
+        error_trace = traceback.format_exc()
+        print(f"❌ VALIDATION ERROR: {e}")
+        print(f"📋 Traceback:\n{error_trace}")
         return {
             "error": f"Validation error: {str(e)}",
-            "technical_metadata": video_metadata
+            "traceback": error_trace,
+            "technical_metadata": video_metadata if 'video_metadata' in locals() else {}
         }
     
     finally:
-        # Cleanup temporary frame files
-        for frame_path in frame_paths:
-            try:
-                if os.path.exists(frame_path):
-                    os.remove(frame_path)
-            except Exception as e:
+        print("🧹 Cleaning up temporary files...")
+        if 'frame_paths' in locals():
+            for frame_path in frame_paths:
+                try:
+                    if os.path.exists(frame_path):
+                        os.remove(frame_path)
+                        print(f"  🗑️ Removed {frame_path}")
+                except Exception as e:
+                    print(f"  ⚠️ Could not remove {frame_path}: {e}")
 
 
-# Standalone validation function for external use
 async def validate_video(
     filepath: str,
     campaign_name: str,
@@ -625,10 +560,7 @@ async def validate_video(
     expected_resolution: str = None,
     expected_aspect_ratio: str = None
 ) -> str:
-    """
-    Validate video and return JSON string result
-    Compatible with existing MCP server interface
-    """
+    """Validate video and return JSON string result"""
     result = await validate_video_with_claude(
         filepath,
         campaign_name,
@@ -644,11 +576,10 @@ async def validate_video(
 if __name__ == "__main__":
     import asyncio
     
-    # Test validation
     test_video = "outputs/video_standard_6s_text_20240101_120000.mp4"
     
     if os.path.exists(test_video):
-        
+        print("🧪 Testing validation...")
         result = asyncio.run(validate_video(
             test_video,
             "Product Launch",
@@ -658,10 +589,7 @@ if __name__ == "__main__":
             expected_resolution="720p",
             expected_aspect_ratio="16:9"
         ))
-        
-        
-        
-        
+        print("\n📊 RESULT:")
+        print(result)
     else:
-        
-        
+        print(f"❌ Test video not found: {test_video}")
