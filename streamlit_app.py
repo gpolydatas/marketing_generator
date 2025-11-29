@@ -1,3 +1,5 @@
+# streamlit_app.py
+
 #!/usr/bin/env python3
 """
 STREAMLIT WEB INTERFACE - WITH MODEL SELECTION AND IMAGE UPLOAD
@@ -162,6 +164,8 @@ if 'weather_primary_color' not in st.session_state:
     st.session_state.weather_primary_color = "#FFFFFF"
 if 'weather_secondary_color' not in st.session_state:
     st.session_state.weather_secondary_color = "#000000"
+if 'delete_file' not in st.session_state:
+    st.session_state.delete_file = None
 
 # Helper functions
 def load_metadata(filepath):
@@ -313,15 +317,24 @@ def display_banner(filepath, metadata=None, key_suffix=""):
                 else:
                     st.error("❌ Validation Failed")
         
-        with open(filepath, 'rb') as f:
-            st.download_button(
-                label="📥 Download",
-                data=f.read(),
-                file_name=os.path.basename(filepath),
-                mime="image/png",
-                use_container_width=True,
-                key=f"download_banner_{os.path.basename(filepath)}_{key_suffix}"
-            )
+        # Download and Delete buttons
+        btn_col1, btn_col2 = st.columns(2)
+        
+        with btn_col1:
+            with open(filepath, 'rb') as f:
+                st.download_button(
+                    label="📥 Download",
+                    data=f.read(),
+                    file_name=os.path.basename(filepath),
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"download_banner_{os.path.basename(filepath)}_{key_suffix}"
+                )
+        
+        with btn_col2:
+            if st.button("🗑️ Delete", key=f"delete_banner_{os.path.basename(filepath)}_{key_suffix}", use_container_width=True):
+                st.session_state.delete_file = filepath
+                st.rerun()
 
 def display_video(filepath, metadata=None, key_suffix=""):
     """Display a video with metadata"""
@@ -340,15 +353,24 @@ def display_video(filepath, metadata=None, key_suffix=""):
             st.write(f"**Model:** {metadata.get('model', 'N/A')}")
             st.write(f"**Size:** {metadata.get('file_size_mb', 0):.2f} MB")
         
-        with open(filepath, 'rb') as f:
-            st.download_button(
-                label="📥 Download",
-                data=f.read(),
-                file_name=os.path.basename(filepath),
-                mime="video/mp4",
-                use_container_width=True,
-                key=f"download_video_{os.path.basename(filepath)}_{key_suffix}"
-            )
+        # Download and Delete buttons
+        btn_col1, btn_col2 = st.columns(2)
+        
+        with btn_col1:
+            with open(filepath, 'rb') as f:
+                st.download_button(
+                    label="📥 Download",
+                    data=f.read(),
+                    file_name=os.path.basename(filepath),
+                    mime="video/mp4",
+                    use_container_width=True,
+                    key=f"download_video_{os.path.basename(filepath)}_{key_suffix}"
+                )
+        
+        with btn_col2:
+            if st.button("🗑️ Delete", key=f"delete_video_{os.path.basename(filepath)}_{key_suffix}", use_container_width=True):
+                st.session_state.delete_file = filepath
+                st.rerun()
 
 def scan_output_directory():
     """Scan output directory for generated content"""
@@ -567,7 +589,31 @@ def check_weather_automation():
     
     return None
 
+def delete_file_with_metadata(filepath):
+    """Delete a file and its associated metadata JSON"""
+    try:
+        # Delete the main file
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        
+        # Delete associated metadata JSON
+        metadata_file = filepath.replace('.png', '.json').replace('.mp4', '.json')
+        if os.path.exists(metadata_file):
+            os.remove(metadata_file)
+        
+        return True
+    except Exception as e:
+        st.error(f"Error deleting file: {str(e)}")
+        return False
+
 def main():
+    # Handle file deletion
+    if st.session_state.delete_file:
+        file_to_delete = st.session_state.delete_file
+        if delete_file_with_metadata(file_to_delete):
+            st.success(f"✅ Deleted {os.path.basename(file_to_delete)}")
+        st.session_state.delete_file = None
+    
     # Check weather automation (runs every 15 minutes if enabled)
     check_weather_automation()
     
@@ -1511,7 +1557,30 @@ def main():
         if not content:
             st.info("🔭 No content yet. Go to the Create Content tab to generate your first banner or video!")
         else:
-            filter_type = st.radio("Filter:", ["All", "Banners Only", "Videos Only"], horizontal=True)
+            # Filter and bulk delete options
+            col_filter, col_bulk = st.columns([2, 1])
+            
+            with col_filter:
+                filter_type = st.radio("Filter:", ["All", "Banners Only", "Videos Only"], horizontal=True)
+            
+            with col_bulk:
+                if st.button("🗑️ Delete All", type="secondary", use_container_width=True):
+                    st.session_state.confirm_delete_all = True
+            
+            # Confirm delete all dialog
+            if st.session_state.get('confirm_delete_all', False):
+                st.warning("⚠️ Are you sure you want to delete ALL content?")
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("✅ Yes, Delete All", type="primary", use_container_width=True):
+                        for item in content:
+                            delete_file_with_metadata(item['filepath'])
+                        st.session_state.confirm_delete_all = False
+                        st.rerun()
+                with col_no:
+                    if st.button("❌ Cancel", use_container_width=True):
+                        st.session_state.confirm_delete_all = False
+                        st.rerun()
             
             if filter_type == "Banners Only":
                 content = [c for c in content if c['type'] == 'banner']
