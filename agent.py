@@ -203,16 +203,13 @@ class Agent:
                 messages=msgs
             )
             
-            # Handle tool calls
+            # ✅ FIXED: Handle tool calls with validation in response
             if response.stop_reason == "tool_use":
-                tool_results = []
-                
                 for block in response.content:
                     if block.type == "tool_use":
                         tool_name = block.name
                         tool_input = block.input
                         
-                        # Call the actual tool
                         if tool_name == "generate_banner":
                             # Fetch weather if requested
                             weather_data = None
@@ -238,40 +235,64 @@ class Agent:
                                 model=tool_input.get('model', 'imagen4')
                             )
                             
-                            # Run validation if text elements exist
                             res = json.loads(result)
-                            if "error" not in res:
-                                brand = tool_input.get('brand_name', '')
-                                message = tool_input.get('message', '')
-                                cta = tool_input.get('cta', '')
-                                
-                                if brand or message or cta:
-                                    from banner_mcp_server import validate_banner
-                                    val_result = await validate_banner(
-                                        filepath=res['filepath'],
-                                        campaign_name=tool_input.get('campaign_name', 'Campaign'),
-                                        brand_name=brand,
-                                        message=message,
-                                        cta=cta
-                                    )
-                                    val_data = json.loads(val_result)
-                                    
-                                    # Add validation to response
-                                    response_text = f"✅ Banner created!\n\n📁 {res['filename']}\n"
-                                    
-                                    if val_data.get('passed'):
-                                        response_text += "✅ Validation PASSED\n"
-                                        scores = val_data.get('scores', {})
-                                        response_text += f"Scores: Brand {scores.get('brand_visibility', 0)}/10, Message {scores.get('message_clarity', 0)}/10, CTA {scores.get('cta_effectiveness', 0)}/10\n"
-                                    else:
-                                        response_text += "⚠️ Validation Issues:\n"
-                                        for issue in val_data.get('issues', []):
-                                            response_text += f"• {issue}\n"
-                                    
-                                    response_text += f"\n🔥 /files/{res['filename']}"
-                                    return response_text
                             
-                            return result if "error" in res else f"✅ Banner created!\n\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
+                            if "error" in res:
+                                return f"❌ Error: {res['error']}"
+                            
+                            # ✅ Build response with validation
+                            brand = tool_input.get('brand_name', '')
+                            message = tool_input.get('message', '')
+                            cta = tool_input.get('cta', '')
+                            
+                            response_text = f"✅ **Banner Created Successfully!**\n\n"
+                            response_text += f"📁 **File:** `{res['filename']}`\n"
+                            response_text += f"📐 **Dimensions:** {res.get('dimensions', 'N/A')}\n"
+                            response_text += f"🔥 **Download:** /files/{res['filename']}\n"
+                            
+                            if brand or message or cta:
+                                response_text += f"\n🔍 **Running Validation...**\n"
+                                
+                                from banner_mcp_server import validate_banner
+                                val_result = await validate_banner(
+                                    filepath=res['filepath'],
+                                    campaign_name=tool_input.get('campaign_name', 'Campaign'),
+                                    brand_name=brand,
+                                    message=message,
+                                    cta=cta
+                                )
+                                val_data = json.loads(val_result)
+                                
+                                if val_data.get('passed'):
+                                    response_text += f"\n✅ **VALIDATION PASSED**\n\n"
+                                    scores = val_data.get('scores', {})
+                                    response_text += f"**Scores:**\n"
+                                    response_text += f"• Brand Visibility: **{scores.get('brand_visibility', 0)}/10**\n"
+                                    response_text += f"• Message Clarity: **{scores.get('message_clarity', 0)}/10**\n"
+                                    response_text += f"• CTA Effectiveness: **{scores.get('cta_effectiveness', 0)}/10**\n"
+                                    response_text += f"• Visual Coherence: **{scores.get('visual_coherence', 0)}/10**\n"
+                                    response_text += f"• Design Quality: **{scores.get('design_quality', 0)}/10**\n"
+                                else:
+                                    response_text += f"\n⚠️ **VALIDATION ISSUES DETECTED**\n\n"
+                                    scores = val_data.get('scores', {})
+                                    response_text += f"**Scores:**\n"
+                                    response_text += f"• Brand Visibility: **{scores.get('brand_visibility', 0)}/10**\n"
+                                    response_text += f"• Message Clarity: **{scores.get('message_clarity', 0)}/10**\n"
+                                    response_text += f"• CTA Effectiveness: **{scores.get('cta_effectiveness', 0)}/10**\n"
+                                    response_text += f"• Visual Coherence: **{scores.get('visual_coherence', 0)}/10**\n"
+                                    response_text += f"• Design Quality: **{scores.get('design_quality', 0)}/10**\n"
+                                    
+                                    issues = val_data.get('issues', [])
+                                    if issues:
+                                        response_text += f"\n**Issues Found:**\n"
+                                        for issue in issues:
+                                            response_text += f"• {issue}\n"
+                                
+                                if val_data.get('summary'):
+                                    response_text += f"\n**Summary:** {val_data['summary']}\n"
+                            
+                            return response_text
+                            
                         elif tool_name == "generate_video":
                             result = await generate_video(
                                 campaign_name=tool_input.get('campaign_name', 'Campaign'),
@@ -282,22 +303,71 @@ class Agent:
                                 aspect_ratio=tool_input.get('aspect_ratio', '16:9'),
                                 screen_format=tool_input.get('screen_format', ''),
                                 input_image_path=tool_input.get('input_image_path', img_paths[0] if img_paths else ''),
-                                model=tool_input.get('model', 'veo')
+                                model=tool_input.get('model', 'veo'),
+                                auto_validate=True  # ✅ Enable auto-validation
                             )
-                        
-                        # Parse result
-                        res = json.loads(result)
-                        
-                        if "error" in res:
-                            return f"❌ Error: {res['error']}"
-                        
-                        # Format success message
-                        if tool_name == "generate_banner":
-                            return f"✅ Banner created!\n\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
-                        else:
-                            return f"✅ Video created!\n\n🎬 {tool_input.get('description', '')}\n📁 {res['filename']}\n🔥 /files/{res['filename']}"
+                            
+                            res = json.loads(result)
+                            
+                            if "error" in res:
+                                return f"❌ Error: {res['error']}"
+                            
+                            # ✅ Build response with validation
+                            response_text = f"✅ **Video Created Successfully!**\n\n"
+                            response_text += f"🎬 **Description:** {tool_input.get('description', '')}\n"
+                            response_text += f"📁 **File:** `{res['filename']}`\n"
+                            response_text += f"⏱️ **Duration:** {res.get('duration', 'N/A')}s\n"
+                            response_text += f"📐 **Resolution:** {res.get('resolution_used', res.get('resolution', 'N/A'))}\n"
+                            response_text += f"🔥 **Download:** /files/{res['filename']}\n"
+                            
+                            # Add validation results if available
+                            if "validation" in res and not res["validation"].get("error"):
+                                validation = res["validation"]
+                                
+                                response_text += f"\n🔍 **VALIDATION RESULTS**\n\n"
+                                
+                                if validation.get("passed"):
+                                    response_text += f"✅ **VALIDATION PASSED**\n\n"
+                                else:
+                                    response_text += f"⚠️ **VALIDATION ISSUES DETECTED**\n\n"
+                                
+                                # Overall score
+                                overall_score = validation.get("overall_score", 0)
+                                response_text += f"**Overall Score: {overall_score:.1f}/10**\n\n"
+                                
+                                # Detailed scores
+                                scores = validation.get("scores", {})
+                                response_text += f"**Detailed Scores:**\n"
+                                response_text += f"• Visual Quality: **{scores.get('visual_quality', 0)}/10**\n"
+                                response_text += f"• Brand Presence: **{scores.get('brand_presence', 0)}/10**\n"
+                                response_text += f"• Content Relevance: **{scores.get('content_relevance', 0)}/10**\n"
+                                response_text += f"• Production Value: **{scores.get('production_value', 0)}/10**\n"
+                                response_text += f"• Technical Execution: **{scores.get('technical_execution', 0)}/10**\n"
+                                response_text += f"• Marketing Effectiveness: **{scores.get('marketing_effectiveness', 0)}/10**\n"
+                                
+                                # Issues
+                                issues = validation.get("issues", [])
+                                if issues:
+                                    response_text += f"\n**Issues Found:**\n"
+                                    for issue in issues[:3]:  # Show top 3 issues
+                                        response_text += f"• {issue}\n"
+                                    if len(issues) > 3:
+                                        response_text += f"• _(+{len(issues) - 3} more issues)_\n"
+                                
+                                # Strengths
+                                strengths = validation.get("strengths", [])
+                                if strengths:
+                                    response_text += f"\n**Strengths:**\n"
+                                    for strength in strengths[:3]:  # Show top 3 strengths
+                                        response_text += f"• {strength}\n"
+                                
+                                # Summary
+                                if validation.get("summary"):
+                                    response_text += f"\n**Summary:** {validation['summary']}\n"
+                            
+                            return response_text
             
-            # If no tool call, return text response (this is where the agent asks questions)
+            # If no tool call, return text response (agent asking questions)
             text_response = ""
             for block in response.content:
                 if hasattr(block, 'text'):

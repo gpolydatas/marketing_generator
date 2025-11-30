@@ -253,7 +253,7 @@ async def generate_video_veo(
     screen_format: str = "",
     input_image_path: str = ""
 ) -> str:
-    """Generate video using Google Veo 3.1 API - supports image-to-video"""
+    """Generate video using Google Veo 3.1 API - FIXED response handling"""
     
     # Check API key
     api_key = os.getenv("GOOGLE_API_KEY")
@@ -554,101 +554,132 @@ REQUIREMENTS:
             })
         
         print(f"✅ Task created: {task_id}")
-        print(f"⏳ Generating video (this takes 1-3 minutes)...")
+
+        # Wait for completion - polling RunwayML status
+        print(f"⏳ Generating video... This takes 1-3 minutes.")
+        max_wait_time = 300  # 5 minutes max
+        start_time = time.time()
+        check_count = 0
         
-        # Poll for completion
-        max_attempts = 60
-        for attempt in range(max_attempts):
-            time.sleep(5)
+        while True:
+            elapsed = time.time() - start_time
             
-            status_response = requests.get(
-                f"https://api.dev.runwayml.com/v1/tasks/{task_id}",
-                headers=headers,
-                timeout=30
-            )
+            if elapsed > max_wait_time:
+                return json.dumps({
+                    "error": f"Video generation timed out after {max_wait_time}s"
+                })
             
-            if status_response.status_code != 200:
-                continue
+            check_count += 1
+            if check_count % 6 == 0:  # Every minute
+                print(f"   Still processing... ({int(elapsed)}s elapsed)")
             
-            status_data = status_response.json()
-            status = status_data.get("status")
+            time.sleep(10)
             
-            if status == "SUCCEEDED":
-                video_url = status_data.get("output", [None])[0]
-                if not video_url:
-                    return json.dumps({"error": "No video URL in response"})
+            # Check status
+            try:
+                status_response = requests.get(
+                    f"https://api.dev.runwayml.com/v1/tasks/{task_id}",
+                    headers=headers,
+                    timeout=30
+                )
                 
-                print(f"✅ Video generated! Downloading...")
-                
-                video_response = requests.get(video_url, timeout=60)
-                
-                if video_response.status_code == 200:
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    source_type = "image" if has_input_image else "text"
-                    
-                    if screen_format:
-                        filename = f"video_{screen_format}_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
-                    else:
-                        filename = f"video_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
-                    
-                    output_dir = os.path.join(os.path.dirname(__file__), "outputs")
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    filepath = os.path.join(output_dir, filename)
-                    
-                    with open(filepath, 'wb') as f:
-                        f.write(video_response.content)
-                    
-                    file_size = len(video_response.content) / 1024 / 1024
-                    
-                    # Save metadata
-                    metadata = {
-                        "campaign": campaign_name,
-                        "brand": brand_name,
-                        "video_type": video_type,
-                        "duration": specs['duration'],
-                        "description": description,
-                        "resolution": resolution,
-                        "aspect_ratio": aspect_ratio,
-                        "source_type": source_type,
-                        "input_image": input_image_path if has_input_image else None,
-                        "filename": filename,
-                        "filepath": filepath,
-                        "url": video_url,
-                        "file_size_mb": round(file_size, 2),
-                        "model": "gen3a_turbo",
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    
-                    metadata_file = filepath.replace('.mp4', '.json')
-                    with open(metadata_file, 'w') as f:
-                        json.dump(metadata, f, indent=2)
-                    
+                if status_response.status_code != 200:
                     return json.dumps({
-                        "success": True,
-                        "filename": filename,
-                        "filepath": filepath,
-                        "url": video_url,
-                        "duration": specs['duration'],
-                        "resolution": resolution,
-                        "aspect_ratio": aspect_ratio,
-                        "source_type": source_type,
-                        "input_image": input_image_path if has_input_image else None,
-                        "file_size_mb": round(file_size, 2),
-                        "model": "gen3a_turbo",
-                        "metadata_file": metadata_file
-                    }, indent=2)
-                else:
-                    return json.dumps({"error": "Failed to download video"})
-            
-            elif status == "FAILED":
-                error_msg = status_data.get("error", "Unknown error")
-                return json.dumps({"error": f"Video generation failed: {error_msg}"})
-            
-            if attempt % 6 == 0:
-                print(f"   Still processing... ({attempt * 5}s elapsed)")
+                        "error": f"Failed to check status: {status_response.status_code}"
+                    })
+                
+                status_data = status_response.json()
+                status = status_data.get("status")
+                
+                if status == "SUCCEEDED":
+                    print("✅ Video generation complete!")
+                    video_url = status_data.get("output", [None])[0]
+                    if not video_url:
+                        return json.dumps({
+                            "error": "No video URL in completed task"
+                        })
+                    break
+                elif status in ["FAILED", "CANCELLED"]:
+                    return json.dumps({
+                        "error": f"Video generation {status.lower()}: {status_data.get('failure')}"
+                    })
+                    
+            except Exception as e:
+                return json.dumps({
+                    "error": f"Failed to check operation status: {str(e)}"
+                })
         
-        return json.dumps({"error": "Video generation timed out after 5 minutes"})
+        # Download video
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        source_type = "image" if has_input_image else "text"
+        
+        if screen_format:
+            filename = f"video_runway_{screen_format}_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
+        else:
+            filename = f"video_runway_{video_type}_{specs['duration']}s_{source_type}_{timestamp}.mp4"
+        
+        output_dir = os.path.join(os.path.dirname(__file__), "outputs")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        filepath = os.path.join(output_dir, filename)
+        
+        # Download video from URL
+        print(f"📥 Downloading video from RunwayML...")
+        video_response = requests.get(video_url, timeout=60)
+        
+        if video_response.status_code != 200:
+            return json.dumps({
+                "error": f"Failed to download video: {video_response.status_code}"
+            })
+        
+        with open(filepath, 'wb') as f:
+            f.write(video_response.content)
+        
+        file_size = os.path.getsize(filepath) / 1024 / 1024
+        print(f"✅ Video saved: {file_size:.2f} MB")
+        
+        # Save metadata
+        metadata = {
+            "campaign": campaign_name,
+            "brand": brand_name,
+            "video_type": video_type,
+            "duration": specs['duration'],
+            "description": description,
+            "resolution": resolution,
+            "aspect_ratio": aspect_ratio,
+            "source_type": source_type,
+            "input_image": input_image_path if has_input_image else None,
+            "filename": filename,
+            "filepath": filepath,
+            "file_size_mb": round(file_size, 2),
+            "model": "runwayml-gen3a-turbo",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        metadata_file = filepath.replace('.mp4', '.json')
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        print("=" * 80)
+        print(f"✅ VIDEO GENERATION COMPLETE")
+        print(f"📁 File: {filename}")
+        print(f"⏱️  Duration: {specs['duration']}s")
+        print(f"📊 Size: {file_size:.2f} MB")
+        print("=" * 80)
+        
+        return json.dumps({
+            "success": True,
+            "filename": filename,
+            "filepath": filepath,
+            "duration": specs['duration'],
+            "resolution": resolution,
+            "aspect_ratio": aspect_ratio,
+            "source_type": source_type,
+            "input_image": input_image_path if has_input_image else None,
+            "file_size_mb": round(file_size, 2),
+            "model": "runwayml-gen3a-turbo",
+            "metadata_file": metadata_file
+        }, indent=2)
             
     except Exception as e:
         return json.dumps({"error": f"RunwayML API error: {str(e)}"})

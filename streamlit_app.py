@@ -1557,11 +1557,15 @@ def main():
         if not content:
             st.info("🔭 No content yet. Go to the Create Content tab to generate your first banner or video!")
         else:
-            # Filter and bulk delete options
-            col_filter, col_bulk = st.columns([2, 1])
+            # Filter options
+            col_filter, col_bulk, col_items = st.columns([2, 1, 1])
             
             with col_filter:
                 filter_type = st.radio("Filter:", ["All", "Banners Only", "Videos Only"], horizontal=True)
+            
+            with col_items:
+                # Items per page selector
+                items_per_page = st.selectbox("Items per page:", [5, 10, 20, 50], index=1)
             
             with col_bulk:
                 if st.button("🗑️ Delete All", type="secondary", use_container_width=True):
@@ -1582,24 +1586,85 @@ def main():
                         st.session_state.confirm_delete_all = False
                         st.rerun()
             
+            # Apply filter
             if filter_type == "Banners Only":
                 content = [c for c in content if c['type'] == 'banner']
             elif filter_type == "Videos Only":
                 content = [c for c in content if c['type'] == 'video']
             
-            st.caption(f"Showing {len(content)} item(s)")
+            total_items = len(content)
+            st.caption(f"Showing {total_items} item(s)")
             
-            for idx, item in enumerate(content):
+            # ✅ PAGINATION - Only load what's needed
+            if 'gallery_page' not in st.session_state:
+                st.session_state.gallery_page = 0
+            
+            total_pages = (total_items + items_per_page - 1) // items_per_page if total_items > 0 else 1
+            
+            # Pagination controls at top
+            if total_pages > 1:
+                col_prev, col_info, col_next = st.columns([1, 2, 1])
+                
+                with col_prev:
+                    if st.button("⬅️ Previous", disabled=st.session_state.gallery_page == 0, use_container_width=True):
+                        st.session_state.gallery_page -= 1
+                        st.rerun()
+                
+                with col_info:
+                    st.markdown(f"<div style='text-align: center; padding: 8px;'>Page {st.session_state.gallery_page + 1} of {total_pages}</div>", unsafe_allow_html=True)
+                
+                with col_next:
+                    if st.button("Next ➡️", disabled=st.session_state.gallery_page >= total_pages - 1, use_container_width=True):
+                        st.session_state.gallery_page += 1
+                        st.rerun()
+            
+            # Reset page if out of bounds
+            if st.session_state.gallery_page >= total_pages:
+                st.session_state.gallery_page = 0
+            
+            # Calculate slice
+            start_idx = st.session_state.gallery_page * items_per_page
+            end_idx = min(start_idx + items_per_page, total_items)
+            
+            # ✅ LAZY LOAD - Only display items on current page
+            page_content = content[start_idx:end_idx]
+            
+            st.markdown(f"**Displaying items {start_idx + 1}-{end_idx} of {total_items}**")
+            st.divider()
+            
+            # Display only current page items
+            for idx, item in enumerate(page_content):
                 with st.container():
                     st.markdown(f"#### {item['filename']}")
                     st.caption(f"📅 {datetime.fromtimestamp(item['timestamp']).strftime('%Y-%m-%d %H:%M:%S')}")
                     
+                    # Lazy load metadata only when needed
+                    if item['metadata'] is None:
+                        item['metadata'] = load_metadata(item['filepath'])
+                    
                     if item['type'] == 'banner':
-                        display_banner(item['filepath'], item['metadata'], key_suffix=f"gallery_{idx}")
+                        display_banner(item['filepath'], item['metadata'], key_suffix=f"gallery_page{st.session_state.gallery_page}_{idx}")
                     else:
-                        display_video(item['filepath'], item['metadata'], key_suffix=f"gallery_{idx}")
+                        display_video(item['filepath'], item['metadata'], key_suffix=f"gallery_page{st.session_state.gallery_page}_{idx}")
                     
                     st.divider()
-
+            
+            # Pagination controls at bottom
+            if total_pages > 1:
+                st.markdown("---")
+                col_prev2, col_info2, col_next2 = st.columns([1, 2, 1])
+                
+                with col_prev2:
+                    if st.button("⬅️ Prev", disabled=st.session_state.gallery_page == 0, use_container_width=True, key="prev_bottom"):
+                        st.session_state.gallery_page -= 1
+                        st.rerun()
+                
+                with col_info2:
+                    st.markdown(f"<div style='text-align: center; padding: 8px;'>Page {st.session_state.gallery_page + 1} of {total_pages}</div>", unsafe_allow_html=True)
+                
+                with col_next2:
+                    if st.button("Next ➡️", disabled=st.session_state.gallery_page >= total_pages - 1, use_container_width=True, key="next_bottom"):
+                        st.session_state.gallery_page += 1
+                        st.rerun()
 if __name__ == "__main__":
     main()
