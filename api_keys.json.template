@@ -1,0 +1,45 @@
+{
+  "valid_keys": {
+    "": {
+      "user": "customer_one",
+      "tier": "standard",
+      "email": "customer1@example.com",
+      "created": "2025-01-01",
+      "expires": null,
+      "notes": "Main production key for Customer One"
+    },
+    "": {
+      "user": "customer_two",
+      "tier": "premium",
+      "email": "customer2@example.com",
+      "created": "2025-01-15",
+      "expires": null,
+      "notes": "Premium tier customer"
+    },
+    "": {
+      "user": "test_user",
+      "tier": "free",
+      "email": "test@example.com",
+      "created": "2025-01-01",
+      "expires": "2025-12-31",
+      "notes": "Testing and development"
+    }
+  },
+  "tiers": {
+    "free": {
+      "requests_per_minute": 5,
+      "requests_per_hour": 50,
+      "features": ["banner_generation", "weather"]
+    },
+    "standard": {
+      "requests_per_minute": 20,
+      "requests_per_hour": 500,
+      "features": ["banner_generation", "video_generation", "weather"]
+    },
+    "premium": {
+      "requests_per_minute": 100,
+      "requests_per_hour": 5000,
+      "features": ["banner_generation", "video_generation", "weather", "admin_stats"]
+    }
+  }
+}
